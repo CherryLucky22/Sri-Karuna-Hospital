@@ -1,0 +1,77 @@
+https://share.google/RmQdSyrdUoSmuetwl
+
+
+
+i want to build a software for this hospital that contains 
+Dashboards:
+Doctors Login,
+Laboratory Login,
+Reception Login,
+Pharmacy Login,
+
+In Reception Login:-
+1. I need OP Registration:
+	 In this i need 3 sections:
+			:Op token number,unique patient id,respective print automatically
+		section 1 : Patient Data like Name, Age, Gender, Mobile Number, City/Village.
+		section 2 : Vitals: HR(beats/min), BP(mmHg),Temp:(F);SPO2(%):,Height(cm);Weight(kg).
+		section 3 :Op token number,unique patient id
+				Services Mentioned:
+				a)General Medicine
+					i)Dr. N. Naveen Kumar
+			     		 Qualification: MBBS, DNB (General Medicine)
+			     		 Specialization: General Physician
+				b)ENT (Ear, Nose & Throat)
+ 					ii)Dr. B. Laxman
+					   Qualification: M.S. (ENT)
+					   Specialization: Ear, Nose & Throat (ENT) Specialist
+				c)Dermatology (Skin Care)
+			             	iii)Dr. K. Sruthi
+						Qualification: MBBS, MD (DVL)
+						Specialization: Dermatologist (Skin Specialist)
+			   
+			    
+2.Fee Payment
+	there are 2 methods of payments
+    i)Cash
+    ii)UPI
+
+after completion whole reception data entry whole page should be printed
+
+
+In Laboratory Login and dashboard keep Empty
+
+In Pharmacy Login:
+1.	there should me all medicine data and there count how many are there in upto date and they can be searched easily and find the medicine . in that there is add method of medicines,removal method of medicines 
+
+2.Payment method :
+there are 2 methods of payments
+    i)Cash
+    ii)UPI
+
+In Doctors Login:
+there are separate logins to respective doctor:
+they should be many dashboards :
+1>Reception Dashboard:
+in this the doctors can view the how many members are took OP and there profiles can be viewed 
+2>Laboratory Dashboard:
+in this they can be viewed the laboratory reports after completion of test imediatelywithout any physical paper view 
+3>Pharmacy Dashboard
+ in this they can view what medicines are there in our hospital
+
+
+
+
+at last 
+if we search patient unique number or Patient details like mobile number
+Previous visit dates
+Doctor consultation history
+Diagnosis
+Prescriptions
+Lab reports
+Billing history
+should be shown in every dashboards
+
+
+In  Simple way the whole software should be work as same as in yashodha hospitals, as same if we enter our phonenumber if already visited to my hospital there should be visible of the history of patient total
+ 
