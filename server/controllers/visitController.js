@@ -19,7 +19,7 @@ const createVisit = async (req, res) => {
         const deptCode = doctorInfo[0].code;
 
         // Generate OP Token
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
         const [lastVisit] = await pool.query(
             `SELECT op_token FROM visits 
              WHERE doctor_id = ? AND visit_date = ? 
@@ -104,7 +104,7 @@ const addVitals = async (req, res) => {
 // @access  Private
 const getTodayVisits = async (req, res) => {
     try {
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
         const [visits] = await pool.query(
             `SELECT v.*, p.name as patient_name, p.patient_id as patient_code, p.mobile_number, 
              d.doctor_name, dep.name as department_name

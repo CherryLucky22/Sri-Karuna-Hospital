@@ -11,7 +11,7 @@ const getDoctorDashboard = async (req, res) => {
         if (doctor.length === 0) return res.status(403).json({ message: 'Not authorized as doctor' });
         const doctorId = doctor[0].id;
 
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
 
         // Get Visits for today
         const [visits] = await pool.query(
@@ -31,7 +31,7 @@ const getDoctorDashboard = async (req, res) => {
 
         // Hospital-wide stats for today
         const [receptionList] = await pool.query(
-            `SELECT v.id, v.op_token, v.status, p.name as patient_name, p.patient_id as patient_code, d.doctor_name, v.visit_time, v.consultation_fee 
+            `SELECT v.id, v.op_token, v.status, p.name as patient_name, p.patient_id as patient_code, d.doctor_name, v.visit_time, v.consultation_fee, v.payment_method 
              FROM visits v 
              JOIN patients p ON v.patient_id = p.id 
              JOIN doctors d ON v.doctor_id = d.id
@@ -40,7 +40,7 @@ const getDoctorDashboard = async (req, res) => {
         );
         
         const [labList] = await pool.query(
-            `SELECT l.id, l.status, l.created_at, t.name as test_name, p.name as patient_name 
+            `SELECT l.id, l.status, l.created_at, t.name as test_name, t.price, p.name as patient_name, v.payment_method 
              FROM lab_reports l 
              JOIN lab_tests t ON l.test_id = t.id 
              JOIN visits v ON l.visit_id = v.id 
@@ -50,7 +50,7 @@ const getDoctorDashboard = async (req, res) => {
         );
 
         const [pharmacyList] = await pool.query(
-            `SELECT pb.bill_number, pb.total_amount, pb.net_amount, pb.discount, pb.gst, pb.created_at, p.name as patient_name 
+            `SELECT pb.bill_number, pb.total_amount, pb.net_amount, pb.discount, pb.gst, pb.created_at, p.name as patient_name, pb.payment_method 
              FROM pharmacy_bills pb 
              LEFT JOIN patients p ON pb.patient_id = p.id 
              WHERE pb.bill_date = ?

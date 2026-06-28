@@ -17,6 +17,22 @@ import LabDashboard from './pages/LabDashboard';
 import PatientSearch from './pages/PatientSearch';
 import Unauthorized from './pages/Unauthorized';
 
+import { AuthContext } from './context/AuthContext';
+import { useContext } from 'react';
+
+const RootRedirect = () => {
+  const { user } = useContext(AuthContext);
+  if (!user) return <Navigate to="/login" />;
+  
+  if (user.role === 'Admin') return <Navigate to="/admin/dashboard" />;
+  if (user.role === 'Reception') return <Navigate to="/reception/dashboard" />;
+  if (user.role === 'Doctor') return <Navigate to="/doctor/dashboard" />;
+  if (user.role === 'Pharmacy') return <Navigate to="/pharmacy/inventory" />;
+  if (user.role === 'Laboratory') return <Navigate to="/lab/dashboard" />;
+  
+  return <Navigate to="/patient-search" />;
+};
+
 function App() {
   return (
     <BrowserRouter>
@@ -28,8 +44,8 @@ function App() {
         <Route path="/" element={<ProtectedRoute />}>
           <Route element={<DashboardLayout />}>
             
-            {/* Redirect root based on role could be handled in a separate component, but for now we just show a welcome or redirect */}
-            <Route index element={<Navigate to="/patient-search" />} />
+            {/* Dynamic redirect based on user role */}
+            <Route index element={<RootRedirect />} />
             
             <Route path="patient-search" element={<PatientSearch />} />
 
@@ -64,6 +80,7 @@ function App() {
 
           </Route>
         </Route>
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   );

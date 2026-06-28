@@ -42,7 +42,7 @@ const createBill = async (req, res) => {
         const { patient_id, prescription_id, total_amount, discount, gst, net_amount, payment_method, items } = req.body;
 
         // Generate Bill Number
-        const today = new Date().toISOString().split('T')[0].replace(/-/g, '');
+        const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0].replace(/-/g, '');
         const [lastBill] = await pool.query('SELECT bill_number FROM pharmacy_bills ORDER BY id DESC LIMIT 1');
         
         let nextNumber = 1;
@@ -52,7 +52,7 @@ const createBill = async (req, res) => {
         }
         const bill_number = `PHM${today}-${nextNumber.toString().padStart(4, '0')}`;
 
-        const todayDate = new Date().toISOString().split('T')[0];
+        const todayDate = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
 
         // 1. Create Bill Record
         const [billResult] = await pool.query(
@@ -97,7 +97,7 @@ const createBill = async (req, res) => {
 // @access  Private (Pharmacy)
 const getPendingPrescriptions = async (req, res) => {
     try {
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
         
         const [prescriptions] = await pool.query(
             `SELECT pr.id, pr.created_at, v.op_token, p.id as patient_id, p.name as patient_name, p.patient_id as patient_code, 

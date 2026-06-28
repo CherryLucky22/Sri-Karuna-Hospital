@@ -9,6 +9,9 @@ const DoctorDashboard = () => {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('waiting');
     const [activeDashboardView, setActiveDashboardView] = useState('queue'); // 'queue', 'reception', 'laboratory', 'pharmacy'
+    const [receptionFilter, setReceptionFilter] = useState('All'); // 'All', 'Cash', 'UPI'
+    const [labFilter, setLabFilter] = useState('All');
+    const [pharmacyFilter, setPharmacyFilter] = useState('All');
     
     // Consultation State
     const [selectedPatient, setSelectedPatient] = useState(null);
@@ -30,6 +33,14 @@ const DoctorDashboard = () => {
     const [labCatalog, setLabCatalog] = useState([]);
     const [selectedLabTest, setSelectedLabTest] = useState('');
     const [labRemarks, setLabRemarks] = useState('');
+    
+    const getGreeting = () => {
+        const hour = new Date().getHours();
+        if (hour < 12) return 'Good Morning';
+        if (hour < 18) return 'Good Afternoon';
+        return 'Good Evening';
+    };
+
     useEffect(() => {
         fetchDashboard();
         fetchInventory();
@@ -126,8 +137,7 @@ const DoctorDashboard = () => {
                     await api.post('/lab/prescribe', { visitId: selectedPatient.id, testId: t.testId, remarks: t.remarks });
                 }
             }
-            alert("Prescription saved successfully!");
-            alert("Prescription sent to Pharmacy successfully!");
+            alert("Prescription saved & sent to Pharmacy successfully!");
             setSelectedPatient(null);
             fetchDashboard();
         } catch (error) {
@@ -244,6 +254,7 @@ const DoctorDashboard = () => {
 
                     {/* Medicines List */}
                     {prescription.medicines.length > 0 && (
+                        <div className="overflow-x-auto">
                         <table className="w-full text-sm border">
                             <thead className="bg-gray-100">
                                 <tr>
@@ -269,6 +280,7 @@ const DoctorDashboard = () => {
                                 ))}
                             </tbody>
                         </table>
+                        </div>
                     )}
                 </div>
 
@@ -316,15 +328,17 @@ const DoctorDashboard = () => {
             </div>
         </div>
     );
-
     // Revenue Calculations
     const receptionData = dashboardData.hospitalStats?.reception?.data || [];
     const receptionRevenue = receptionData.reduce((acc, curr) => acc + (parseFloat(curr.consultation_fee) || 0), 0);
     
+    const laboratoryData = dashboardData.hospitalStats?.laboratory?.data || [];
+    const labRevenue = laboratoryData.reduce((acc, curr) => acc + (parseFloat(curr.price) || 0), 0);
+    
     const pharmacyData = dashboardData.hospitalStats?.pharmacy?.data || [];
     const pharmacyRevenue = pharmacyData.reduce((acc, curr) => acc + (parseFloat(curr.net_amount) || parseFloat(curr.total_amount) || 0), 0);
     
-    const totalRevenue = receptionRevenue + pharmacyRevenue;
+    const totalRevenue = receptionRevenue + labRevenue + pharmacyRevenue;
 
     return (
         <div className="h-full">
@@ -332,50 +346,88 @@ const DoctorDashboard = () => {
                 renderConsultation()
             ) : (
                 <div className="space-y-6">
-                    <h2 className="text-2xl font-bold text-gray-800">Doctor Dashboard</h2>
+                    <div>
+                        <h2 className="text-2xl font-extrabold text-gray-900">Doctor Dashboard</h2>
+                        <p className="text-sm font-medium text-gray-600 mt-1">{getGreeting()}, {user?.name || 'Doctor'} 👋</p>
+                    </div>
                     
                     {dashboardData.hospitalStats && (
                         <div className="mb-8">
-                            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">Hospital Overview (Today)</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                <div onClick={() => setActiveDashboardView('reception')} className={`border rounded-xl flex items-center justify-between p-4 shadow-sm cursor-pointer transition ${activeDashboardView === 'reception' ? 'bg-indigo-100 border-indigo-300' : 'bg-indigo-50 border-indigo-100 hover:bg-indigo-100'}`}>
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-3 bg-white bg-opacity-60 rounded-lg text-indigo-600"><UserPlus className="w-6 h-6"/></div>
-                                        <div>
-                                            <p className="text-sm font-bold text-indigo-900">OP Registered</p>
-                                            <p className="text-2xl font-black text-indigo-900">{dashboardData.hospitalStats.reception?.count || 0}</p>
-                                            <p className="text-xs text-indigo-700 font-medium">Rev: ₹{receptionRevenue.toFixed(2)}</p>
+                            <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">Hospital Overview (Today)</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                                {/* OP Registered */}
+                                <div onClick={() => setActiveDashboardView('reception')} className="bg-white border border-gray-100 rounded-2xl flex items-center justify-between p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] cursor-pointer hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all relative overflow-hidden group">
+                                    <div className="flex gap-4 w-full">
+                                        <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                                            <UserPlus className="w-7 h-7"/>
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-[13px] font-bold text-blue-800">OP Registered</p>
+                                            <p className="text-3xl font-black text-gray-900 my-1">{dashboardData.hospitalStats.reception?.count || 0}</p>
+                                            <div className="flex justify-between items-end w-full">
+                                                <p className="text-[11px] text-gray-500 font-medium">Revenue: ₹{receptionRevenue.toFixed(2)}</p>
+                                                {/* Mini Chart SVG */}
+                                                <svg width="40" height="20" viewBox="0 0 40 20" className="opacity-70 group-hover:opacity-100 transition-opacity">
+                                                    <path d="M0 15 Q 10 10 20 18 T 40 5" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round"/>
+                                                </svg>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div onClick={() => setActiveDashboardView('laboratory')} className={`border rounded-xl flex items-center justify-between p-4 shadow-sm cursor-pointer transition ${activeDashboardView === 'laboratory' ? 'bg-purple-100 border-purple-300' : 'bg-purple-50 border-purple-100 hover:bg-purple-100'}`}>
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-3 bg-white bg-opacity-60 rounded-lg text-purple-600"><FileText className="w-6 h-6"/></div>
-                                        <div>
-                                            <p className="text-sm font-bold text-purple-900">Lab Reports</p>
-                                            <p className="text-2xl font-black text-purple-900">{dashboardData.hospitalStats.laboratory?.count || 0}</p>
+                                
+                                {/* Lab Reports */}
+                                <div onClick={() => setActiveDashboardView('laboratory')} className="bg-white border border-gray-100 rounded-2xl flex items-center justify-between p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] cursor-pointer hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all relative overflow-hidden group">
+                                    <div className="flex gap-4 w-full">
+                                        <div className="w-14 h-14 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600 shrink-0">
+                                            <FileText className="w-7 h-7"/>
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-[13px] font-bold text-purple-800">Lab Reports</p>
+                                            <p className="text-3xl font-black text-gray-900 my-1">{dashboardData.hospitalStats.laboratory?.count || 0}</p>
+                                            <div className="flex justify-between items-end w-full">
+                                                <p className="text-[11px] text-gray-500 font-medium">Revenue: ₹{labRevenue.toFixed(2)}</p>
+                                                <svg width="40" height="20" viewBox="0 0 40 20" className="opacity-70 group-hover:opacity-100 transition-opacity">
+                                                    <path d="M0 15 Q 10 20 20 10 T 40 5" fill="none" stroke="#9333ea" strokeWidth="2" strokeLinecap="round"/>
+                                                </svg>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div onClick={() => setActiveDashboardView('pharmacy')} className={`border rounded-xl flex items-center justify-between p-4 shadow-sm cursor-pointer transition ${activeDashboardView === 'pharmacy' ? 'bg-pink-100 border-pink-300' : 'bg-pink-50 border-pink-100 hover:bg-pink-100'}`}>
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-3 bg-white bg-opacity-60 rounded-lg text-pink-600"><Pill className="w-6 h-6"/></div>
-                                        <div>
-                                            <p className="text-sm font-bold text-pink-900">Pharmacy Bills</p>
-                                            <p className="text-2xl font-black text-pink-900">{dashboardData.hospitalStats.pharmacy?.count || 0}</p>
-                                            <p className="text-xs text-pink-700 font-medium">Rev: ₹{pharmacyRevenue.toFixed(2)}</p>
+
+                                {/* Pharmacy Bills */}
+                                <div onClick={() => setActiveDashboardView('pharmacy')} className="bg-white border border-gray-100 rounded-2xl flex items-center justify-between p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] cursor-pointer hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all relative overflow-hidden group">
+                                    <div className="flex gap-4 w-full">
+                                        <div className="w-14 h-14 rounded-2xl bg-pink-50 flex items-center justify-center text-[#d81b60] shrink-0">
+                                            <Pill className="w-7 h-7"/>
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-[13px] font-bold text-[#d81b60]">Pharmacy Bills</p>
+                                            <p className="text-3xl font-black text-gray-900 my-1">{dashboardData.hospitalStats.pharmacy?.count || 0}</p>
+                                            <div className="flex justify-between items-end w-full">
+                                                <p className="text-[11px] text-gray-500 font-medium">Revenue: ₹{pharmacyRevenue.toFixed(2)}</p>
+                                                <svg width="40" height="20" viewBox="0 0 40 20" className="opacity-70 group-hover:opacity-100 transition-opacity">
+                                                    <path d="M0 18 Q 15 5 25 15 T 40 5" fill="none" stroke="#d81b60" strokeWidth="2" strokeLinecap="round"/>
+                                                </svg>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="border rounded-xl flex items-center justify-between p-4 shadow-sm bg-green-50 border-green-100">
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-3 bg-white bg-opacity-60 rounded-lg text-green-600">
-                                            <span className="font-bold text-xl">₹</span>
+
+                                {/* Total Revenue */}
+                                <div className="bg-gradient-to-br from-green-50/50 to-green-100/50 border border-green-100 rounded-2xl flex items-center justify-between p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden">
+                                    <div className="flex gap-4 w-full">
+                                        <div className="w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center text-green-600 shrink-0">
+                                            <span className="font-bold text-2xl">₹</span>
                                         </div>
-                                        <div>
-                                            <p className="text-sm font-bold text-green-900">Total Revenue</p>
-                                            <p className="text-2xl font-black text-green-900">₹{totalRevenue.toFixed(2)}</p>
-                                            <p className="text-xs text-green-700 font-medium">Today's Earnings</p>
+                                        <div className="flex-1">
+                                            <p className="text-[13px] font-bold text-green-800">Total Revenue</p>
+                                            <p className="text-2xl font-black text-green-700 my-1 tracking-tight">₹{totalRevenue.toLocaleString('en-IN', {minimumFractionDigits: 2})}</p>
+                                            <div className="flex justify-between items-end w-full">
+                                                <p className="text-[11px] text-green-700/70 font-bold">Today's Earnings</p>
+                                                <svg width="40" height="20" viewBox="0 0 40 20">
+                                                    <path d="M0 15 Q 10 20 20 12 T 40 5" fill="none" stroke="#15803d" strokeWidth="2" strokeLinecap="round"/>
+                                                </svg>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -385,63 +437,153 @@ const DoctorDashboard = () => {
 
                     {activeDashboardView === 'queue' ? (
                         <>
-                            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">Your Queue (Today)</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                                <div className="card bg-blue-50 border-blue-200">
-                                    <h3 className="text-lg font-bold text-blue-800 flex items-center gap-2"><Users /> Today's Total</h3>
-                                    <p className="text-4xl font-black text-blue-900 mt-2">{dashboardData.todayTotal}</p>
+                            <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3 mt-4">Your Queue (Today)</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
+                                {/* Today's Total */}
+                                <div className="bg-gradient-to-r from-[#eef2fa] to-[#e0eaf5] border border-blue-100 rounded-2xl p-6 relative overflow-hidden">
+                                    <Users className="absolute -right-4 -bottom-4 w-32 h-32 text-blue-200/50 transform -rotate-12 pointer-events-none" />
+                                    <div className="flex items-center gap-4 relative z-10">
+                                        <div className="w-16 h-16 rounded-full bg-white/60 shadow-sm flex items-center justify-center text-blue-600 shrink-0">
+                                            <Users className="w-8 h-8"/>
+                                        </div>
+                                        <div>
+                                            <h3 className="text-sm font-bold text-blue-800 mb-1">Today's Total</h3>
+                                            <p className="text-4xl font-black text-blue-900 leading-none">{dashboardData.todayTotal}</p>
+                                            <p className="text-[11px] font-medium text-blue-700/80 mt-1">Total Patients</p>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="card bg-orange-50 border-orange-200 cursor-pointer" onClick={() => setActiveTab('waiting')}>
-                                    <h3 className="text-lg font-bold text-orange-800 flex items-center gap-2"><Activity /> Waiting</h3>
-                                    <p className="text-4xl font-black text-orange-900 mt-2">{dashboardData.waiting}</p>
+                                
+                                {/* Waiting */}
+                                <div className="bg-gradient-to-r from-[#fff3e0] to-[#ffe0b2] border border-orange-200/50 rounded-2xl p-6 relative overflow-hidden">
+                                    <Activity className="absolute -right-4 -bottom-4 w-32 h-32 text-orange-200/50 transform -rotate-12 pointer-events-none" />
+                                    <div className="flex items-center gap-4 relative z-10">
+                                        <div className="w-16 h-16 rounded-full bg-white/60 shadow-sm flex items-center justify-center text-[#e65100] shrink-0">
+                                            <Activity className="w-8 h-8"/>
+                                        </div>
+                                        <div>
+                                            <h3 className="text-sm font-bold text-[#e65100] mb-1">Waiting</h3>
+                                            <p className="text-4xl font-black text-[#e65100] leading-none">{dashboardData.waiting}</p>
+                                            <p className="text-[11px] font-medium text-orange-800/80 mt-1">Patients</p>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="card bg-green-50 border-green-200 cursor-pointer" onClick={() => setActiveTab('completed')}>
-                                    <h3 className="text-lg font-bold text-green-800 flex items-center gap-2"><CheckCircle /> Completed</h3>
-                                    <p className="text-4xl font-black text-green-900 mt-2">{dashboardData.completed}</p>
+                                
+                                {/* Completed */}
+                                <div className="bg-gradient-to-r from-[#e8f5e9] to-[#c8e6c9] border border-green-200/50 rounded-2xl p-6 relative overflow-hidden">
+                                    <CheckCircle className="absolute -right-4 -bottom-4 w-32 h-32 text-green-200/50 transform -rotate-12 pointer-events-none" />
+                                    <div className="flex items-center gap-4 relative z-10">
+                                        <div className="w-16 h-16 rounded-full bg-white/60 shadow-sm flex items-center justify-center text-green-700 shrink-0">
+                                            <CheckCircle className="w-8 h-8"/>
+                                        </div>
+                                        <div>
+                                            <h3 className="text-sm font-bold text-green-800 mb-1">Completed</h3>
+                                            <p className="text-4xl font-black text-green-900 leading-none">{dashboardData.completed}</p>
+                                            <p className="text-[11px] font-medium text-green-800/80 mt-1">Patients</p>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="card">
-                                <div className="flex border-b mb-4">
-                                    <button className={`px-4 py-2 font-bold ${activeTab === 'waiting' ? 'text-primary border-b-2 border-primary' : 'text-gray-500'}`} onClick={() => setActiveTab('waiting')}>Waiting Queue</button>
-                                    <button className={`px-4 py-2 font-bold ${activeTab === 'completed' ? 'text-green-600 border-b-2 border-green-600' : 'text-gray-500'}`} onClick={() => setActiveTab('completed')}>Completed</button>
+                            <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 overflow-hidden">
+                                <div className="flex border-b border-gray-100 px-6 pt-4">
+                                    <button 
+                                        className={`px-6 py-4 font-bold text-sm flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'waiting' ? 'text-[#d32f2f] border-[#d32f2f]' : 'text-gray-500 border-transparent hover:text-gray-700'}`} 
+                                        onClick={() => setActiveTab('waiting')}
+                                    >
+                                        <Activity className="w-4 h-4"/> Waiting Queue
+                                    </button>
+                                    <button 
+                                        className={`px-6 py-4 font-bold text-sm flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'completed' ? 'text-gray-900 border-gray-900' : 'text-gray-500 border-transparent hover:text-gray-700'}`} 
+                                        onClick={() => setActiveTab('completed')}
+                                    >
+                                        <CheckCircle className="w-4 h-4"/> Completed
+                                    </button>
                                 </div>
                                 
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {dashboardData.patients.filter(p => p.status.toLowerCase() === activeTab).length === 0 ? (
-                                        <p className="text-gray-500 p-4">No patients in this list.</p>
-                                    ) : (
-                                        dashboardData.patients.filter(p => p.status.toLowerCase() === activeTab).map(patient => (
-                                            <div key={patient.id} className="border rounded-xl p-4 shadow-sm hover:shadow-md transition bg-white relative">
-                                                <div className="absolute top-0 right-0 bg-gray-100 text-xs font-mono px-2 py-1 rounded-bl-lg rounded-tr-lg border-b border-l text-gray-600">
-                                                    {patient.visit_time}
-                                                </div>
-                                                <h3 className="font-bold text-lg text-primary">{patient.patient_name}</h3>
-                                                <p className="text-sm font-mono text-gray-500 mb-2">{patient.patient_code} | Token: {patient.op_token}</p>
-                                                <p className="text-xs text-gray-600 mb-4">{patient.age} Yrs • {patient.gender}</p>
-                                                
-                                                {activeTab === 'waiting' && (
-                                                    <button 
-                                                        onClick={() => {
-                                                            setSelectedPatient(patient);
-                                                            setVitals(patient.vitals || {});
-                                                        }} 
-                                                        className="w-full btn-primary py-2 flex justify-center gap-2 text-sm"
-                                                    >
-                                                        <FilePlus className="w-4 h-4"/> Start Consultation
-                                                    </button>
-                                                )}
-                                                {activeTab === 'completed' && (
-                                                    <button onClick={() => fetchSummary(patient.id)} className="w-full btn-secondary py-2 text-sm text-green-700 border-green-600">
-                                                        View Summary
-                                                    </button>
-                                                )}
-                                            </div>
-                                        ))
-                                    )}
+                                <div className="p-0 overflow-x-auto">
+                                    <table className="w-full text-sm text-left min-w-[600px]">
+                                        <thead className="bg-gray-50/50 text-gray-500 text-[10px] uppercase tracking-wider font-bold">
+                                            <tr>
+                                                <th className="px-6 py-4">Token No.</th>
+                                                <th className="px-6 py-4">Patient ID</th>
+                                                <th className="px-6 py-4">Patient Name</th>
+                                                <th className="px-6 py-4">Age / Gender</th>
+                                                <th className="px-6 py-4">Time</th>
+                                                <th className="px-6 py-4">Status</th>
+                                                <th className="px-6 py-4 text-center">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {dashboardData.patients.filter(p => p.status.toLowerCase() === activeTab).length === 0 ? (
+                                                <tr>
+                                                    <td colSpan="7">
+                                                        <div className="flex flex-col items-center justify-center py-16">
+                                                            <div className="relative mb-4">
+                                                                <FileText className="w-16 h-16 text-red-200" />
+                                                                <div className="absolute -top-2 -right-2 text-red-400 opacity-50">✨</div>
+                                                                <div className="absolute -bottom-1 -left-2 text-red-400 opacity-50">✨</div>
+                                                            </div>
+                                                            <h3 className="text-gray-800 font-bold text-lg mb-1">No patients in the {activeTab} queue</h3>
+                                                            <p className="text-gray-500 text-sm">All caught up! Great job.</p>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                dashboardData.patients.filter(p => p.status.toLowerCase() === activeTab).map(patient => (
+                                                    <tr key={patient.id} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-6 py-4">
+                                                            <span className="font-bold text-gray-800 text-base">{patient.op_token}</span>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className="text-xs font-mono font-semibold bg-gray-100 px-2 py-1 rounded text-gray-600">{patient.patient_code}</span>
+                                                        </td>
+                                                        <td className="px-6 py-4 font-bold text-gray-900">{patient.patient_name}</td>
+                                                        <td className="px-6 py-4 text-gray-600 text-xs font-medium">{patient.age} Yrs • {patient.gender}</td>
+                                                        <td className="px-6 py-4 text-gray-500 text-xs font-semibold">{patient.visit_time}</td>
+                                                        <td className="px-6 py-4">
+                                                            {activeTab === 'waiting' ? (
+                                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-orange-50 text-[#e65100]">
+                                                                    <div className="w-1.5 h-1.5 rounded-full bg-[#e65100]"></div>
+                                                                    Waiting
+                                                                </span>
+                                                            ) : (
+                                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-green-50 text-green-700">
+                                                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>
+                                                                    Completed
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-center">
+                                                            {activeTab === 'waiting' && (
+                                                                <button 
+                                                                    onClick={() => {
+                                                                        setSelectedPatient(patient);
+                                                                        setVitals(patient.vitals || {});
+                                                                        setPrescription({ chief_complaint: '', history: '', clinical_findings: '', diagnosis: '', advice: '', follow_up_date: '', medicines: [], labTests: [] });
+                                                                        setSearchMed('');
+                                                                        setFilteredMeds([]);
+                                                                    }} 
+                                                                    className="bg-[#d32f2f] hover:bg-[#b71c1c] text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm transition-colors"
+                                                                >
+                                                                    Consult
+                                                                </button>
+                                                            )}
+                                                            {activeTab === 'completed' && (
+                                                                <button onClick={() => fetchSummary(patient.id)} className="border border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-xs font-bold transition-colors">
+                                                                    View
+                                                                </button>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         </>
+
                     ) : (
                         <div className="card">
                             <div className="flex justify-between items-center mb-6">
@@ -449,99 +591,166 @@ const DoctorDashboard = () => {
                                 <button onClick={() => setActiveDashboardView('queue')} className="btn-secondary text-sm">Back to Queue</button>
                             </div>
                             
-                            {activeDashboardView === 'reception' && (
-                                <table className="w-full text-sm text-left border">
-                                    <thead className="bg-indigo-50 text-indigo-900 border-b">
-                                        <tr>
-                                            <th className="p-3">Patient Name</th>
-                                            <th className="p-3">Patient ID</th>
-                                            <th className="p-3">Token</th>
-                                            <th className="p-3">Doctor Assigned</th>
-                                            <th className="p-3">Time</th>
-                                            <th className="p-3">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {dashboardData.hospitalStats.reception.data.map(item => (
-                                            <tr key={item.id} className="border-b hover:bg-gray-50">
-                                                <td className="p-3 font-bold">{item.patient_name}</td>
-                                                <td className="p-3 font-mono">{item.patient_code}</td>
-                                                <td className="p-3">{item.op_token}</td>
-                                                <td className="p-3">{item.doctor_name}</td>
-                                                <td className="p-3">{item.visit_time}</td>
-                                                <td className="p-3">
-                                                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${item.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                                                        {item.status}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                        {dashboardData.hospitalStats.reception.data.length === 0 && (
-                                            <tr><td colSpan="6" className="p-4 text-center text-gray-500">No OP Registrations today.</td></tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            )}
+                            {activeDashboardView === 'reception' && (() => {
+                                const filteredData = dashboardData.hospitalStats.reception.data.filter(item => receptionFilter === 'All' || (item.payment_method || 'Cash') === receptionFilter);
+                                const totalFee = filteredData.reduce((sum, item) => sum + parseFloat(item.consultation_fee || 0), 0);
+                                return (
+                                    <div className="space-y-4">
+                                        <div className="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-100">
+                                            <div className="flex gap-2">
+                                                <button onClick={() => setReceptionFilter('All')} className={`px-4 py-1.5 rounded-lg text-sm font-bold border transition-colors ${receptionFilter === 'All' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>All</button>
+                                                <button onClick={() => setReceptionFilter('Cash')} className={`px-4 py-1.5 rounded-lg text-sm font-bold border transition-colors ${receptionFilter === 'Cash' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>Cash</button>
+                                                <button onClick={() => setReceptionFilter('UPI')} className={`px-4 py-1.5 rounded-lg text-sm font-bold border transition-colors ${receptionFilter === 'UPI' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>UPI</button>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Total Collection</p>
+                                                <p className="text-lg font-black text-indigo-700">₹{totalFee.toFixed(2)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm text-left border">
+                                                <thead className="bg-indigo-50 text-indigo-900 border-b">
+                                                    <tr>
+                                                        <th className="p-3">Patient Name</th>
+                                                        <th className="p-3">Patient ID</th>
+                                                        <th className="p-3">Token</th>
+                                                        <th className="p-3">Doctor Assigned</th>
+                                                        <th className="p-3">Payment Mode</th>
+                                                        <th className="p-3">Fee</th>
+                                                        <th className="p-3">Time</th>
+                                                        <th className="p-3">Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {filteredData.map(item => (
+                                                        <tr key={item.id} className="border-b hover:bg-gray-50">
+                                                            <td className="p-3 font-bold">{item.patient_name}</td>
+                                                            <td className="p-3 font-mono">{item.patient_code}</td>
+                                                            <td className="p-3">{item.op_token}</td>
+                                                            <td className="p-3">{item.doctor_name}</td>
+                                                            <td className="p-3 text-xs font-bold text-gray-600">{item.payment_method || 'Cash'}</td>
+                                                            <td className="p-3 font-bold text-gray-800">₹{item.consultation_fee}</td>
+                                                            <td className="p-3">{item.visit_time}</td>
+                                                            <td className="p-3">
+                                                                <span className={`px-2 py-1 rounded-full text-xs font-bold ${item.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                                                                    {item.status}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                    {filteredData.length === 0 && (
+                                                        <tr><td colSpan="8" className="p-4 text-center text-gray-500">No OP Registrations found.</td></tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
 
-                            {activeDashboardView === 'laboratory' && (
-                                <table className="w-full text-sm text-left border">
-                                    <thead className="bg-purple-50 text-purple-900 border-b">
-                                        <tr>
-                                            <th className="p-3">Patient Name</th>
-                                            <th className="p-3">Test Name</th>
-                                            <th className="p-3">Time</th>
-                                            <th className="p-3">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {dashboardData.hospitalStats.laboratory.data.map(item => (
-                                            <tr key={item.id} className="border-b hover:bg-gray-50">
-                                                <td className="p-3 font-bold">{item.patient_name}</td>
-                                                <td className="p-3">{item.test_name}</td>
-                                                <td className="p-3">{new Date(item.created_at).toLocaleTimeString()}</td>
-                                                <td className="p-3">
-                                                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${item.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                                                        {item.status}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                        {dashboardData.hospitalStats.laboratory.data.length === 0 && (
-                                            <tr><td colSpan="4" className="p-4 text-center text-gray-500">No Lab Reports generated today.</td></tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            )}
+                            {activeDashboardView === 'laboratory' && (() => {
+                                const filteredData = dashboardData.hospitalStats.laboratory.data.filter(item => labFilter === 'All' || (item.payment_method || 'Cash') === labFilter);
+                                const totalFee = filteredData.reduce((sum, item) => sum + parseFloat(item.price || 0), 0);
+                                return (
+                                    <div className="space-y-4">
+                                        <div className="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-100">
+                                            <div className="flex gap-2">
+                                                <button onClick={() => setLabFilter('All')} className={`px-4 py-1.5 rounded-lg text-sm font-bold border transition-colors ${labFilter === 'All' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>All</button>
+                                                <button onClick={() => setLabFilter('Cash')} className={`px-4 py-1.5 rounded-lg text-sm font-bold border transition-colors ${labFilter === 'Cash' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>Cash</button>
+                                                <button onClick={() => setLabFilter('UPI')} className={`px-4 py-1.5 rounded-lg text-sm font-bold border transition-colors ${labFilter === 'UPI' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>UPI</button>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Total Collection</p>
+                                                <p className="text-lg font-black text-purple-700">₹{totalFee.toFixed(2)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm text-left border">
+                                                <thead className="bg-purple-50 text-purple-900 border-b">
+                                                    <tr>
+                                                        <th className="p-3">Patient Name</th>
+                                                        <th className="p-3">Test Name</th>
+                                                        <th className="p-3">Payment Mode</th>
+                                                        <th className="p-3">Cost</th>
+                                                        <th className="p-3">Time</th>
+                                                        <th className="p-3">Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {filteredData.map(item => (
+                                                        <tr key={item.id} className="border-b hover:bg-gray-50">
+                                                            <td className="p-3 font-bold">{item.patient_name}</td>
+                                                            <td className="p-3">{item.test_name}</td>
+                                                            <td className="p-3 text-xs font-bold text-gray-600">{item.payment_method || 'Cash'}</td>
+                                                            <td className="p-3 font-bold text-gray-800">₹{item.price}</td>
+                                                            <td className="p-3">{new Date(item.created_at).toLocaleTimeString()}</td>
+                                                            <td className="p-3">
+                                                                <span className={`px-2 py-1 rounded-full text-xs font-bold ${item.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                                                                    {item.status}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                    {filteredData.length === 0 && (
+                                                        <tr><td colSpan="6" className="p-4 text-center text-gray-500">No Lab Reports found.</td></tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
 
-                            {activeDashboardView === 'pharmacy' && (
-                                <table className="w-full text-sm text-left border">
-                                    <thead className="bg-pink-50 text-pink-900 border-b">
-                                        <tr>
-                                            <th className="p-3">Bill Number</th>
-                                            <th className="p-3">Patient Name</th>
-                                            <th className="p-3">Discount</th>
-                                            <th className="p-3">GST</th>
-                                            <th className="p-3">Amount Paid</th>
-                                            <th className="p-3">Time</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {dashboardData.hospitalStats.pharmacy.data.map((item, idx) => (
-                                            <tr key={idx} className="border-b hover:bg-gray-50">
-                                                <td className="p-3 font-mono font-bold text-pink-600">{item.bill_number}</td>
-                                                <td className="p-3 font-bold">{item.patient_name || 'Walk-in Customer'}</td>
-                                                <td className="p-3 text-green-600">{item.discount > 0 ? `₹${item.discount}` : '-'}</td>
-                                                <td className="p-3 text-red-600">{item.gst > 0 ? `₹${item.gst}` : '-'}</td>
-                                                <td className="p-3 font-bold text-gray-800">₹{item.net_amount || item.total_amount}</td>
-                                                <td className="p-3">{new Date(item.created_at).toLocaleTimeString()}</td>
-                                            </tr>
-                                        ))}
-                                        {dashboardData.hospitalStats.pharmacy.data.length === 0 && (
-                                            <tr><td colSpan="6" className="p-4 text-center text-gray-500">No Pharmacy Bills generated today.</td></tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            )}
+                            {activeDashboardView === 'pharmacy' && (() => {
+                                const filteredData = dashboardData.hospitalStats.pharmacy.data.filter(item => pharmacyFilter === 'All' || (item.payment_method || 'Cash') === pharmacyFilter);
+                                const totalFee = filteredData.reduce((sum, item) => sum + parseFloat(item.net_amount || item.total_amount || 0), 0);
+                                return (
+                                    <div className="space-y-4">
+                                        <div className="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-100">
+                                            <div className="flex gap-2">
+                                                <button onClick={() => setPharmacyFilter('All')} className={`px-4 py-1.5 rounded-lg text-sm font-bold border transition-colors ${pharmacyFilter === 'All' ? 'bg-pink-600 text-white border-pink-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>All</button>
+                                                <button onClick={() => setPharmacyFilter('Cash')} className={`px-4 py-1.5 rounded-lg text-sm font-bold border transition-colors ${pharmacyFilter === 'Cash' ? 'bg-pink-600 text-white border-pink-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>Cash</button>
+                                                <button onClick={() => setPharmacyFilter('UPI')} className={`px-4 py-1.5 rounded-lg text-sm font-bold border transition-colors ${pharmacyFilter === 'UPI' ? 'bg-pink-600 text-white border-pink-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>UPI</button>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Total Collection</p>
+                                                <p className="text-lg font-black text-pink-700">₹{totalFee.toFixed(2)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm text-left border">
+                                                <thead className="bg-pink-50 text-pink-900 border-b">
+                                                    <tr>
+                                                        <th className="p-3">Bill Number</th>
+                                                        <th className="p-3">Patient Name</th>
+                                                        <th className="p-3">Payment Mode</th>
+                                                        <th className="p-3">Discount</th>
+                                                        <th className="p-3">GST</th>
+                                                        <th className="p-3">Amount Paid</th>
+                                                        <th className="p-3">Time</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {filteredData.map((item, idx) => (
+                                                        <tr key={idx} className="border-b hover:bg-gray-50">
+                                                            <td className="p-3 font-mono font-bold text-pink-600">{item.bill_number}</td>
+                                                            <td className="p-3 font-bold">{item.patient_name || 'Walk-in Customer'}</td>
+                                                            <td className="p-3 text-xs font-bold text-gray-600">{item.payment_method || 'Cash'}</td>
+                                                            <td className="p-3 text-green-600">{item.discount > 0 ? `₹${item.discount}` : '-'}</td>
+                                                            <td className="p-3 text-red-600">{item.gst > 0 ? `₹${item.gst}` : '-'}</td>
+                                                            <td className="p-3 font-bold text-gray-800">₹{item.net_amount || item.total_amount}</td>
+                                                            <td className="p-3">{new Date(item.created_at).toLocaleTimeString()}</td>
+                                                        </tr>
+                                                    ))}
+                                                    {filteredData.length === 0 && (
+                                                        <tr><td colSpan="7" className="p-4 text-center text-gray-500">No Pharmacy Bills found.</td></tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </div>
                     )}
                 </div>
@@ -580,6 +789,7 @@ const DoctorDashboard = () => {
                                     <div>
                                         <h4 className="font-bold text-sm text-gray-500 uppercase tracking-wider mb-3">Prescribed Medicines</h4>
                                         {summaryModal.data.medicines?.length > 0 ? (
+                                            <div className="overflow-x-auto">
                                             <table className="w-full text-sm text-left border">
                                                 <thead className="bg-gray-50">
                                                     <tr>
@@ -601,6 +811,7 @@ const DoctorDashboard = () => {
                                                     ))}
                                                 </tbody>
                                             </table>
+                                            </div>
                                         ) : (
                                             <p className="text-sm text-gray-500 italic">No medicines prescribed.</p>
                                         )}
@@ -615,7 +826,7 @@ const DoctorDashboard = () => {
                                                         <p className="font-bold text-primary mb-1">{report.test_name}</p>
                                                         {report.status === 'Completed' ? (
                                                             <div>
-                                                                <p className="text-sm">Result: <span className="font-bold">{report.observed_value}</span> {report.unit}</p>
+                                                                <p className="text-sm">Result: <span className="font-bold">{report.result_value}</span> {report.unit}</p>
                                                                 <p className="text-xs text-gray-500">Normal Range: {report.normal_range}</p>
                                                             </div>
                                                         ) : (

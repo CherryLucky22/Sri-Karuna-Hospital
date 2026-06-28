@@ -67,11 +67,25 @@ const AdminDashboard = () => {
         ]
     };
 
+    const revenueChartData = {
+        labels: charts.dailyRevenue ? charts.dailyRevenue.map(d => new Date(d.date).toLocaleDateString()) : [],
+        datasets: [
+            {
+                label: 'Daily Revenue (Last 7 Days)',
+                data: charts.dailyRevenue ? charts.dailyRevenue.map(d => d.revenue) : [],
+                borderColor: '#4CAF50',
+                backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                fill: true,
+                tension: 0.4
+            }
+        ]
+    };
+
     return (
         <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-800">Admin Dashboard</h2>
+            <h2 className="text-2xl font-bold text-gray-800">Admin Dashboard & Analytics</h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div className="card border-t-4 border-t-primary">
                     <p className="text-sm text-gray-500 mb-1 flex items-center gap-2"><Users className="w-4 h-4"/> Today's OP</p>
                     <h3 className="text-3xl font-black text-gray-800">{stats.todaysOP}</h3>
@@ -88,17 +102,27 @@ const AdminDashboard = () => {
                     <p className="text-sm text-gray-500 mb-1 flex items-center gap-2"><LayoutDashboard className="w-4 h-4"/> Total Patients</p>
                     <h3 className="text-3xl font-black text-gray-800">{stats.totalPatients}</h3>
                 </div>
+                <div className="card border-t-4 border-t-purple-500 bg-purple-50/30">
+                    <p className="text-sm text-purple-700 mb-1 flex items-center gap-2 font-bold"><Activity className="w-4 h-4"/> All-Time Revenue</p>
+                    <h3 className="text-3xl font-black text-purple-900">₹{stats.totalRevenue || 0}</h3>
+                </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 card">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="card">
                     <h3 className="text-lg font-bold mb-4">Patient Visits Trend</h3>
                     <div className="h-72 w-full">
                         <Line data={lineChartData} options={{ maintainAspectRatio: false }} />
                     </div>
                 </div>
                 <div className="card">
-                    <h3 className="text-lg font-bold mb-4">Department Distribution</h3>
+                    <h3 className="text-lg font-bold mb-4">Daily Revenue Trend</h3>
+                    <div className="h-72 w-full">
+                        <Line data={revenueChartData} options={{ maintainAspectRatio: false }} />
+                    </div>
+                </div>
+                <div className="card lg:col-span-2">
+                    <h3 className="text-lg font-bold mb-4 text-center">Department Distribution</h3>
                     <div className="h-64 w-full flex justify-center">
                         <Doughnut data={doughnutData} options={{ maintainAspectRatio: false }} />
                     </div>

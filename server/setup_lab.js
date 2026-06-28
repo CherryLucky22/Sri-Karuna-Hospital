@@ -30,6 +30,7 @@ async function run() {
             test_id INT NOT NULL,
             result_value VARCHAR(255),
             remarks TEXT,
+            lab_remarks TEXT,
             status ENUM('Pending', 'Completed') DEFAULT 'Pending',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

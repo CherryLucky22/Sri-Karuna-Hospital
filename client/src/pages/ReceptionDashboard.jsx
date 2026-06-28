@@ -108,14 +108,13 @@ const ReceptionDashboard = () => {
                                 <th className="px-4 py-3">Doctor</th>
                                 <th className="px-4 py-3">Time</th>
                                 <th className="px-4 py-3">Status</th>
-                                <th className="px-4 py-3 text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {loading ? (
-                                <tr><td colSpan="7" className="text-center py-8 text-gray-500">Loading...</td></tr>
+                                <tr><td colSpan="6" className="text-center py-8 text-gray-500">Loading...</td></tr>
                             ) : visits.length === 0 ? (
-                                <tr><td colSpan="7" className="text-center py-8 text-gray-500">No registrations today.</td></tr>
+                                <tr><td colSpan="6" className="text-center py-8 text-gray-500">No registrations today.</td></tr>
                             ) : (
                                 visits.map(visit => (
                                     <tr key={visit.id} className="hover:bg-gray-50 transition-colors">
@@ -131,15 +130,6 @@ const ReceptionDashboard = () => {
                                             }`}>
                                                 {visit.status}
                                             </span>
-                                        </td>
-                                        <td className="px-4 py-3 text-right">
-                                            <button 
-                                                onClick={() => setSelectedVisitForVitals(visit)}
-                                                className="btn-secondary py-1 px-2 text-xs flex items-center gap-1 justify-end ml-auto"
-                                            >
-                                                <HeartPulse className="w-4 h-4 text-red-500" />
-                                                Add Vitals
-                                            </button>
                                         </td>
                                     </tr>
                                 ))

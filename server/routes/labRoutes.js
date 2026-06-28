@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getAllLabTests, prescribeLabTest, getLabReports, updateLabReport } = require('../controllers/labController');
+const { getAllLabTests, prescribeLabTest, getLabReports, updateLabReport, addWalkInTest } = require('../controllers/labController');
 const { protect } = require('../middleware/authMiddleware');
 
 // Get all lab tests available (Catalog)
@@ -14,5 +14,8 @@ router.get('/reports', protect, getLabReports);
 
 // Lab tech updates a report (enter results)
 router.put('/report/:id', protect, updateLabReport);
+
+// Lab tech adds walk-in test
+router.post('/walkin', protect, addWalkInTest);
 
 module.exports = router;

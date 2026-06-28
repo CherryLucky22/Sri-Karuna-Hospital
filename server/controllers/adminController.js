@@ -5,7 +5,7 @@ const pool = require('../config/db');
 // @access  Private (Admin)
 const getAdminDashboardStats = async (req, res) => {
     try {
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
 
         // Today's Stats
         const [[{ todaysOP }]] = await pool.query('SELECT COUNT(*) as todaysOP FROM visits WHERE visit_date = ?', [today]);
@@ -17,6 +17,8 @@ const getAdminDashboardStats = async (req, res) => {
         // Total Stats
         const [[{ totalPatients }]] = await pool.query('SELECT COUNT(*) as totalPatients FROM patients');
         const [[{ totalDoctors }]] = await pool.query('SELECT COUNT(*) as totalDoctors FROM doctors');
+        const [[{ totalRevenue }]] = await pool.query('SELECT SUM(consultation_fee) as totalRevenue FROM visits');
+        const [[{ totalPharmacySales }]] = await pool.query('SELECT SUM(net_amount) as totalPharmacySales FROM pharmacy_bills');
         
         // Department Wise Patients (for Chart)
         const [deptPatients] = await pool.query(
@@ -35,17 +37,27 @@ const getAdminDashboardStats = async (req, res) => {
              GROUP BY visit_date ORDER BY visit_date ASC`, [today]
         );
 
+        // Daily Revenue Trend (last 7 days)
+        const [dailyRevenue] = await pool.query(
+            `SELECT visit_date as date, SUM(consultation_fee) as revenue
+             FROM visits
+             WHERE visit_date >= DATE_SUB(?, INTERVAL 7 DAY)
+             GROUP BY visit_date ORDER BY visit_date ASC`, [today]
+        );
+
         res.json({
             stats: {
                 todaysOP,
                 todaysRevenue: todaysRevenue || 0,
                 todaysPharmacySales: todaysPharmacySales || 0,
                 totalPatients,
-                totalDoctors
+                totalDoctors,
+                totalRevenue: (totalRevenue || 0) + (totalPharmacySales || 0)
             },
             charts: {
                 deptPatients,
-                dailyOP
+                dailyOP,
+                dailyRevenue
             }
         });
 
