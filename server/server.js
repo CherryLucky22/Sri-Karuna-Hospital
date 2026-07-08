@@ -22,8 +22,34 @@ app.use('/api/pharmacy', require('./routes/pharmacyRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/lab', require('./routes/labRoutes'));
 
-// Health check
-app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+app.get('/api/health', async (req, res) => {
+    try {
+        const pool = require('./config/db');
+        const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
+        
+        let errors = [];
+        let results = {};
+        
+        try {
+            const [[dailyPatients]] = await pool.query(`SELECT COUNT(*) as count, SUM(consultation_fee) as revenue FROM visits WHERE visit_date = ?`, [today]);
+            results.daily = dailyPatients;
+        } catch (e) { errors.push("daily: " + e.message); }
+
+        try {
+            const [[weeklyPatients]] = await pool.query(`SELECT COUNT(*) as count, SUM(consultation_fee) as revenue FROM visits WHERE visit_date >= DATE_SUB(?, INTERVAL 7 DAY)`, [today]);
+            results.weekly = weeklyPatients;
+        } catch (e) { errors.push("weekly: " + e.message); }
+
+        try {
+            const [[monthlyPatients]] = await pool.query(`SELECT COUNT(*) as count, SUM(consultation_fee) as revenue FROM visits WHERE MONTH(visit_date) = MONTH(?) AND YEAR(visit_date) = YEAR(?)`, [today, today]);
+            results.monthly = monthlyPatients;
+        } catch (e) { errors.push("monthly: " + e.message); }
+
+        res.json({ status: 'ok', results, errors, today });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
 // Serve React frontend in production
 if (process.env.NODE_ENV === 'production') {

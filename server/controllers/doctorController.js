@@ -177,17 +177,31 @@ const getDoctorsList = async (req, res) => {
 // @access  Private (Doctor)
 const getHospitalAnalysis = async (req, res) => {
     try {
+        const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
+
         // Daily
-        const [[dailyPatients]] = await pool.query(`SELECT COUNT(*) as count, SUM(consultation_fee) as revenue FROM visits WHERE visit_date = CURDATE()`);
-        const [[dailyPharmacy]] = await pool.query(`SELECT SUM(net_amount) as revenue FROM pharmacy_bills WHERE bill_date = CURDATE()`);
+        const [[dailyPatients]] = await pool.query(`SELECT COUNT(DISTINCT patient_id) as count, SUM(consultation_fee) as revenue FROM visits WHERE visit_date = ?`, [today]);
+        const [[dailyPharmacy]] = await pool.query(`SELECT SUM(net_amount) as revenue FROM pharmacy_bills WHERE bill_date = ?`, [today]);
         
         // Weekly
-        const [[weeklyPatients]] = await pool.query(`SELECT COUNT(*) as count, SUM(consultation_fee) as revenue FROM visits WHERE visit_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)`);
-        const [[weeklyPharmacy]] = await pool.query(`SELECT SUM(net_amount) as revenue FROM pharmacy_bills WHERE bill_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)`);
+        const [[weeklyPatients]] = await pool.query(`SELECT COUNT(DISTINCT patient_id) as count, SUM(consultation_fee) as revenue FROM visits WHERE visit_date >= DATE_SUB(?, INTERVAL 7 DAY)`, [today]);
+        const [[weeklyPharmacy]] = await pool.query(`SELECT SUM(net_amount) as revenue FROM pharmacy_bills WHERE bill_date >= DATE_SUB(?, INTERVAL 7 DAY)`, [today]);
         
         // Monthly
-        const [[monthlyPatients]] = await pool.query(`SELECT COUNT(*) as count, SUM(consultation_fee) as revenue FROM visits WHERE MONTH(visit_date) = MONTH(CURDATE()) AND YEAR(visit_date) = YEAR(CURDATE())`);
-        const [[monthlyPharmacy]] = await pool.query(`SELECT SUM(net_amount) as revenue FROM pharmacy_bills WHERE MONTH(bill_date) = MONTH(CURDATE()) AND YEAR(bill_date) = YEAR(CURDATE())`);
+        const [[monthlyPatients]] = await pool.query(`SELECT COUNT(DISTINCT patient_id) as count, SUM(consultation_fee) as revenue FROM visits WHERE MONTH(visit_date) = MONTH(?) AND YEAR(visit_date) = YEAR(?)`, [today, today]);
+        const [[monthlyPharmacy]] = await pool.query(`SELECT SUM(net_amount) as revenue FROM pharmacy_bills WHERE MONTH(bill_date) = MONTH(?) AND YEAR(bill_date) = YEAR(?)`, [today, today]);
+
+        // Last Month
+        const [[lastMonthPatients]] = await pool.query(`SELECT COUNT(DISTINCT patient_id) as count, SUM(consultation_fee) as revenue FROM visits WHERE MONTH(visit_date) = MONTH(DATE_SUB(?, INTERVAL 1 MONTH)) AND YEAR(visit_date) = YEAR(DATE_SUB(?, INTERVAL 1 MONTH))`, [today, today]);
+        const [[lastMonthPharmacy]] = await pool.query(`SELECT SUM(net_amount) as revenue FROM pharmacy_bills WHERE MONTH(bill_date) = MONTH(DATE_SUB(?, INTERVAL 1 MONTH)) AND YEAR(bill_date) = YEAR(DATE_SUB(?, INTERVAL 1 MONTH))`, [today, today]);
+
+        // Yearly
+        const [[yearlyPatients]] = await pool.query(`SELECT COUNT(DISTINCT patient_id) as count, SUM(consultation_fee) as revenue FROM visits WHERE YEAR(visit_date) = YEAR(?)`, [today]);
+        const [[yearlyPharmacy]] = await pool.query(`SELECT SUM(net_amount) as revenue FROM pharmacy_bills WHERE YEAR(bill_date) = YEAR(?)`, [today]);
+
+        // All Time
+        const [[allTimePatients]] = await pool.query(`SELECT COUNT(DISTINCT patient_id) as count, SUM(consultation_fee) as revenue FROM visits`);
+        const [[allTimePharmacy]] = await pool.query(`SELECT SUM(net_amount) as revenue FROM pharmacy_bills`);
 
         res.json({
             daily: {
@@ -201,6 +215,18 @@ const getHospitalAnalysis = async (req, res) => {
             monthly: {
                 patients: monthlyPatients.count || 0,
                 revenue: (parseFloat(monthlyPatients.revenue) || 0) + (parseFloat(monthlyPharmacy.revenue) || 0)
+            },
+            lastMonth: {
+                patients: lastMonthPatients.count || 0,
+                revenue: (parseFloat(lastMonthPatients.revenue) || 0) + (parseFloat(lastMonthPharmacy.revenue) || 0)
+            },
+            yearly: {
+                patients: yearlyPatients.count || 0,
+                revenue: (parseFloat(yearlyPatients.revenue) || 0) + (parseFloat(yearlyPharmacy.revenue) || 0)
+            },
+            allTime: {
+                patients: allTimePatients.count || 0,
+                revenue: (parseFloat(allTimePatients.revenue) || 0) + (parseFloat(allTimePharmacy.revenue) || 0)
             }
         });
 

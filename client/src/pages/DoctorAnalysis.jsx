@@ -65,11 +65,11 @@ const DoctorAnalysis = () => {
     );
 
     const patientChartData = {
-        labels: ['Today', 'Last 7 Days', 'This Month'],
+        labels: ['Today', 'Last 7 Days', 'This Month', 'Last Month', 'This Year'],
         datasets: [
             {
                 label: 'Patients',
-                data: [data?.daily?.patients || 0, data?.weekly?.patients || 0, data?.monthly?.patients || 0],
+                data: [data?.daily?.patients || 0, data?.weekly?.patients || 0, data?.monthly?.patients || 0, data?.lastMonth?.patients || 0, data?.yearly?.patients || 0],
                 backgroundColor: 'rgba(59, 130, 246, 0.7)',
                 borderColor: 'rgba(59, 130, 246, 1)',
                 borderWidth: 1,
@@ -79,11 +79,11 @@ const DoctorAnalysis = () => {
     };
 
     const revenueChartData = {
-        labels: ['Today', 'Last 7 Days', 'This Month'],
+        labels: ['Today', 'Last 7 Days', 'This Month', 'Last Month', 'This Year'],
         datasets: [
             {
                 label: 'Revenue (₹)',
-                data: [data?.daily?.revenue || 0, data?.weekly?.revenue || 0, data?.monthly?.revenue || 0],
+                data: [data?.daily?.revenue || 0, data?.weekly?.revenue || 0, data?.monthly?.revenue || 0, data?.lastMonth?.revenue || 0, data?.yearly?.revenue || 0],
                 backgroundColor: 'rgba(16, 185, 129, 0.7)',
                 borderColor: 'rgba(16, 185, 129, 1)',
                 borderWidth: 1,
@@ -135,6 +135,27 @@ const DoctorAnalysis = () => {
                     revenue={data?.monthly?.revenue}
                     icon={BarChart3}
                     colorClass="bg-pink-50 border-pink-100"
+                />
+                <StatCard 
+                    title="Last Month Overview" 
+                    patients={data?.lastMonth?.patients} 
+                    revenue={data?.lastMonth?.revenue}
+                    icon={Calendar}
+                    colorClass="bg-orange-50 border-orange-100"
+                />
+                <StatCard 
+                    title="Yearly Overview (This Year)" 
+                    patients={data?.yearly?.patients} 
+                    revenue={data?.yearly?.revenue}
+                    icon={TrendingUp}
+                    colorClass="bg-teal-50 border-teal-100"
+                />
+                <StatCard 
+                    title="All-Time Overview" 
+                    patients={data?.allTime?.patients} 
+                    revenue={data?.allTime?.revenue}
+                    icon={BarChart3}
+                    colorClass="bg-indigo-50 border-indigo-100"
                 />
             </div>
 

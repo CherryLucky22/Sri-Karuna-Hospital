@@ -48,11 +48,11 @@ const getAdminDashboardStats = async (req, res) => {
         res.json({
             stats: {
                 todaysOP,
-                todaysRevenue: todaysRevenue || 0,
-                todaysPharmacySales: todaysPharmacySales || 0,
+                todaysRevenue: parseFloat(todaysRevenue) || 0,
+                todaysPharmacySales: parseFloat(todaysPharmacySales) || 0,
                 totalPatients,
                 totalDoctors,
-                totalRevenue: (totalRevenue || 0) + (totalPharmacySales || 0)
+                totalRevenue: (parseFloat(totalRevenue) || 0) + (parseFloat(totalPharmacySales) || 0)
             },
             charts: {
                 deptPatients,
