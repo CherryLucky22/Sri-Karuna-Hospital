@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Activity, UserRound, Lock, AlertCircle, ShieldCheck, Users, BarChart3, HeartPulse, ShieldPlus, Mail, Eye, EyeOff, LogIn } from 'lucide-react';
@@ -10,22 +10,10 @@ const Login = () => {
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
-    const [rememberMe, setRememberMe] = useState(false);
+    const [rememberMe, setRememberMe] = useState(true);
     
     const { login } = useContext(AuthContext);
     const navigate = useNavigate();
-
-    useEffect(() => {
-        const savedEmail = localStorage.getItem('rememberedEmail');
-        const savedRole = localStorage.getItem('rememberedRole');
-        if (savedEmail) {
-            setEmail(savedEmail);
-            setRememberMe(true);
-        }
-        if (savedRole) {
-            setRole(savedRole);
-        }
-    }, []);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -223,7 +211,7 @@ const Login = () => {
                     </form>
 
                     <div className="mt-8 text-center">
-                        <p className="text-[10px] text-gray-400 font-medium">© 2025 Sri Karuna Hospital. All rights reserved.</p>
+                        <p className="text-[10px] text-gray-400 font-medium">© 2026 Sri Karuna Hospital. All rights reserved.</p>
                     </div>
                 </div>
             </div>
