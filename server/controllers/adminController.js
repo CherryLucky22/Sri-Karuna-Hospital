@@ -48,7 +48,7 @@ const getAdminDashboardStats = async (req, res) => {
         res.json({
             stats: {
                 todaysOP,
-                todaysRevenue: parseFloat(todaysRevenue) || 0,
+                todaysRevenue: (parseFloat(todaysRevenue) || 0) + (parseFloat(todaysPharmacySales) || 0),
                 todaysPharmacySales: parseFloat(todaysPharmacySales) || 0,
                 totalPatients,
                 totalDoctors,
