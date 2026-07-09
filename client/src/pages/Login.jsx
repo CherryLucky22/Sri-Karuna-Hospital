@@ -149,6 +149,9 @@ const Login = () => {
                                 <Mail className="w-4 h-4 absolute left-3.5 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
                                 <input 
                                     type="email" 
+                                    id="email"
+                                    name="email"
+                                    autoComplete="username"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     placeholder="Enter your email"
@@ -164,6 +167,9 @@ const Login = () => {
                                 <Lock className="w-4 h-4 absolute left-3.5 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
                                 <input 
                                     type={showPassword ? "text" : "password"} 
+                                    id="password"
+                                    name="password"
+                                    autoComplete="current-password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder="Enter your password"

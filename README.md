@@ -47,6 +47,7 @@ Before you begin, ensure you have met the following requirements:
 | **Reception** | `reception@karuna.com`  |
 | **Doctor** | `naveen@karuna.com`        |
 | **Pharmacy**| `pharmacy@karuna.com`     |
+| **Laboratory**| `lab@karuna.com`        |
 
 ---
 
