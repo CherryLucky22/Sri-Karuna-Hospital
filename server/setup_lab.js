@@ -2,11 +2,12 @@ const mysql = require('mysql2/promise');
 
 async function run() {
     try {
+        require('dotenv').config();
         const db = await mysql.createConnection({
-            host: 'localhost',
-            user: 'root',
-            password: 'Uday@2006',
-            database: 'hospital_management'
+            host: process.env.DB_HOST || 'localhost',
+            user: process.env.DB_USER || 'root',
+            password: process.env.DB_PASSWORD || 'Uday@2006',
+            database: process.env.DB_NAME || 'hospital_management'
         });
 
         await db.query('DROP TABLE IF EXISTS lab_reports;');
@@ -58,10 +59,8 @@ async function run() {
         }
 
         console.log('Successfully setup Lab Tables!');
-        process.exit(0);
     } catch (err) {
         console.error(err);
-        process.exit(1);
     }
 }
 

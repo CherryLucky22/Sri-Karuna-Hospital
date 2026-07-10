@@ -161,9 +161,9 @@ const getPrescriptionSummary = async (req, res) => {
 const getDoctorsList = async (req, res) => {
     try {
         const [doctors] = await pool.query(
-            `SELECT d.id, d.doctor_name as name, d.specialization, d.consultation_fee, dep.name as department 
+            `SELECT d.id, d.doctor_name as name, d.specialization, d.consultation_fee, COALESCE(d.specialization, dep.name) as department 
              FROM doctors d
-             JOIN departments dep ON d.department_id = dep.id`
+             LEFT JOIN departments dep ON d.department_id = dep.id`
         );
         res.json(doctors);
     } catch (error) {

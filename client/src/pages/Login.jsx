@@ -1,7 +1,8 @@
 import React, { useState, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Activity, UserRound, Lock, AlertCircle, ShieldCheck, Users, BarChart3, HeartPulse, ShieldPlus, Mail, Eye, EyeOff, LogIn } from 'lucide-react';
+import { Activity, UserRound, Lock, AlertCircle, ShieldCheck, Users, BarChart3, HeartPulse, ShieldPlus, Mail, Eye, EyeOff, LogIn, ExternalLink } from 'lucide-react';
+import { FaGithub, FaLinkedin } from 'react-icons/fa';
 
 const Login = () => {
     const [email, setEmail] = useState('');
@@ -42,7 +43,7 @@ const Login = () => {
     };
 
     return (
-        <div className="min-h-screen bg-[#f8fbff] flex items-center justify-center p-4 md:p-8 relative overflow-hidden">
+        <div className="min-h-screen bg-[#f8fbff] flex flex-col relative overflow-hidden">
             {/* Background Waves (SVG) */}
             <div className="absolute bottom-0 left-0 w-full overflow-hidden pointer-events-none opacity-40">
                 <svg viewBox="0 0 1440 320" xmlns="http://www.w3.org/2000/svg">
@@ -51,7 +52,8 @@ const Login = () => {
                 </svg>
             </div>
             
-            <div className="max-w-[950px] w-full bg-white rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] overflow-hidden flex flex-col md:flex-row relative z-10 border border-gray-100">
+            <div className="flex-1 flex items-center justify-center p-4 md:p-8 w-full relative z-10">
+                <div className="max-w-[950px] w-full bg-white rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] overflow-hidden flex flex-col md:flex-row relative border border-gray-100">
                 
                 {/* Left Side - Branding */}
                 <div className="md:w-[45%] bg-[#082247] text-white flex flex-col justify-between p-10 relative overflow-hidden">
@@ -219,6 +221,34 @@ const Login = () => {
                     <div className="mt-8 text-center">
                         <p className="text-[10px] text-gray-400 font-medium">© 2026 Sri Karuna Hospital. All rights reserved.</p>
                     </div>
+                </div>
+            </div>
+            </div>
+
+            {/* Developer Dashboard Footer */}
+            <div className="w-full bg-white/80 backdrop-blur-xl border-t border-gray-200/50 shadow-[0_-4px_20px_rgba(0,0,0,0.03)] z-20 py-4 px-6 md:px-12 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#1a73e8] to-indigo-600 p-[2px] shadow-md flex items-center justify-center text-white overflow-hidden relative">
+                        <UserRound className="w-6 h-6 absolute opacity-30" />
+                        <img src="/developer.png" alt="Kadari Uday" className="w-full h-full rounded-full border-2 border-white object-cover relative z-10 bg-white" onError={(e) => {e.target.style.display = 'none'}} />
+                    </div>
+                    <div>
+                        <p className="text-[11px] text-gray-500 font-bold tracking-widest uppercase mb-0.5">Developed & Maintained By</p>
+                        <h3 className="text-sm font-bold bg-gradient-to-r from-[#1a73e8] to-indigo-700 bg-clip-text text-transparent">Kadari Uday</h3>
+                    </div>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                    <a href="https://portfolio-kadariudays-projects.vercel.app/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-5 py-2 rounded-full bg-[#f0f4f9] text-[#1a73e8] hover:bg-[#e8f0fe] transition-all text-xs font-bold border border-blue-100/50 hover:shadow-sm hover:-translate-y-0.5">
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        Portfolio
+                    </a>
+                    <a href="https://github.com/Kadariuday" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-9 h-9 rounded-full bg-gray-50 text-gray-700 hover:bg-gray-200 transition-all border border-gray-200 hover:-translate-y-0.5 hover:shadow-sm">
+                        <FaGithub className="w-4 h-4" />
+                    </a>
+                    <a href="https://www.linkedin.com/in/kadari-uday/" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-9 h-9 rounded-full bg-[#f3f8ff] text-[#0a66c2] hover:bg-[#dce6f5] transition-all border border-blue-100 hover:-translate-y-0.5 hover:shadow-sm">
+                        <FaLinkedin className="w-4 h-4" />
+                    </a>
                 </div>
             </div>
         </div>

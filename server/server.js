@@ -65,8 +65,22 @@ app.use((err, req, res, next) => {
     res.status(500).json({ message: 'Something went wrong on the server', error: err.message });
 });
 
-const PORT = process.env.PORT || 5000;
+// Setup Lab Tests if empty
+require('./setup_lab');
 
+// Dump schema
+(async () => {
+    try {
+        const pool = require('./config/db');
+        const [doctors] = await pool.query('DESCRIBE doctors');
+        const [users] = await pool.query('DESCRIBE users');
+        require('fs').writeFileSync('schema.txt', JSON.stringify({doctors, users}, null, 2));
+    } catch(e) {
+        require('fs').writeFileSync('schema.txt', e.toString());
+    }
+})();
+
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });

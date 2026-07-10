@@ -12,7 +12,9 @@ const ManageUsers = () => {
         email: '',
         password: '',
         role: 'Reception',
-        phone: ''
+        phone: '',
+        specialization: '',
+        consultation_fee: ''
     });
 
     const fetchUsers = async () => {
@@ -33,10 +35,10 @@ const ManageUsers = () => {
     const handleOpenModal = (user = null) => {
         if (user) {
             setEditingUser(user);
-            setFormData({ name: user.name, email: user.email, password: '', role: user.role, phone: user.phone || '' });
+            setFormData({ name: user.name, email: user.email, password: '', role: user.role, phone: user.phone || '', specialization: user.specialization || '', consultation_fee: user.consultation_fee || '' });
         } else {
             setEditingUser(null);
-            setFormData({ name: '', email: '', password: '', role: 'Reception', phone: '' });
+            setFormData({ name: '', email: '', password: '', role: 'Reception', phone: '', specialization: '', consultation_fee: '' });
         }
         setIsModalOpen(true);
     };
@@ -63,7 +65,7 @@ const ManageUsers = () => {
             fetchUsers();
         } catch (error) {
             console.error('Error saving user:', error);
-            alert(error.response?.data?.message || 'Error saving user');
+            alert((error.response?.data?.message || 'Error saving user') + '\\n' + (error.response?.data?.error || ''));
         }
     };
 
@@ -180,6 +182,20 @@ const ManageUsers = () => {
                                     <option value="Pharmacy">Pharmacy</option>
                                 </select>
                             </div>
+                            
+                            {formData.role === 'Doctor' && (
+                                <>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Specialisation *</label>
+                                        <input required type="text" name="specialization" value={formData.specialization} onChange={handleInputChange} className="input-field" placeholder="e.g. Cardiologist" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Consultation Fee (₹) *</label>
+                                        <input required type="number" name="consultation_fee" value={formData.consultation_fee} onChange={handleInputChange} className="input-field" placeholder="e.g. 500" />
+                                    </div>
+                                </>
+                            )}
+
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-1">Phone</label>
                                 <input type="text" name="phone" value={formData.phone} onChange={handleInputChange} className="input-field" placeholder="+91 9876543210" />

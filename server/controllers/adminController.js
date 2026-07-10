@@ -72,7 +72,12 @@ const getAdminDashboardStats = async (req, res) => {
 // @access  Private (Admin)
 const getUsers = async (req, res) => {
     try {
-        const [users] = await pool.query('SELECT id, name, email, role, phone, created_at FROM users ORDER BY created_at DESC');
+        const [users] = await pool.query(`
+            SELECT u.id, u.name, u.email, u.role, u.phone, u.created_at, d.specialization, d.consultation_fee 
+            FROM users u
+            LEFT JOIN doctors d ON u.id = d.user_id
+            ORDER BY u.created_at DESC
+        `);
         res.json(users);
     } catch (error) {
         console.error(error);
@@ -85,7 +90,7 @@ const getUsers = async (req, res) => {
 // @access  Private (Admin)
 const createUser = async (req, res) => {
     try {
-        const { name, email, password, role, phone } = req.body;
+        const { name, email, password, role, phone, specialization, consultation_fee } = req.body;
         const bcrypt = require('bcrypt');
         
         const [existing] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
@@ -94,15 +99,25 @@ const createUser = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        await pool.query(
+        const [result] = await pool.query(
             'INSERT INTO users (name, email, password, role, phone) VALUES (?, ?, ?, ?, ?)',
             [name, email, hashedPassword, role, phone]
         );
 
+        if (role === 'Doctor') {
+            const [deps] = await pool.query('SELECT id FROM departments LIMIT 1');
+            const defaultDept = deps.length > 0 ? deps[0].id : null;
+            await pool.query(
+                'INSERT INTO doctors (user_id, doctor_name, specialization, consultation_fee, department_id) VALUES (?, ?, ?, ?, ?)',
+                [result.insertId, name, specialization || 'General Physician', consultation_fee || 0, defaultDept]
+            );
+        }
+
         res.status(201).json({ message: 'User created successfully' });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        require('fs').writeFileSync('error.txt', error.toString() + '\\n' + error.stack);
+        res.status(500).json({ message: 'Server error', error: error.message, stack: error.stack });
     }
 };
 
@@ -111,7 +126,7 @@ const createUser = async (req, res) => {
 // @access  Private (Admin)
 const updateUser = async (req, res) => {
     try {
-        const { name, email, role, phone, password } = req.body;
+        const { name, email, role, phone, password, specialization, consultation_fee } = req.body;
         const userId = req.params.id;
         
         let query = 'UPDATE users SET name=?, email=?, role=?, phone=? WHERE id=?';
@@ -126,10 +141,22 @@ const updateUser = async (req, res) => {
         }
 
         await pool.query(query, params);
+
+        if (role === 'Doctor') {
+            const [doc] = await pool.query('SELECT id FROM doctors WHERE user_id = ?', [userId]);
+            if (doc.length > 0) {
+                await pool.query('UPDATE doctors SET doctor_name = ?, specialization = ?, consultation_fee = ? WHERE user_id = ?', [name, specialization || 'General Physician', consultation_fee || 0, userId]);
+            } else {
+                const [deps] = await pool.query('SELECT id FROM departments LIMIT 1');
+                const defaultDept = deps.length > 0 ? deps[0].id : null;
+                await pool.query('INSERT INTO doctors (user_id, doctor_name, specialization, consultation_fee, department_id) VALUES (?, ?, ?, ?, ?)', [userId, name, specialization || 'General Physician', consultation_fee || 0, defaultDept]);
+            }
+        }
+
         res.json({ message: 'User updated successfully' });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error', error: error.message, stack: error.stack });
     }
 };
 
