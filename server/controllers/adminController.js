@@ -162,13 +162,10 @@ const createUser = async (req, res) => {
             return res.status(400).json({ message: 'Email already exists' });
         }
 
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
-
         const newUser = await User.create({
             name,
             email: email.toLowerCase(),
-            password: hashedPassword,
+            password: password,
             role,
             phone
         });
@@ -201,8 +198,7 @@ const updateUser = async (req, res) => {
 
         const updateData = { name, email: email ? email.toLowerCase() : undefined, role, phone };
         if (password) {
-            const salt = await bcrypt.genSalt(10);
-            updateData.password = await bcrypt.hash(password, salt);
+            updateData.password = password;
         }
 
         const user = await User.findByIdAndUpdate(userId, updateData, { new: true });

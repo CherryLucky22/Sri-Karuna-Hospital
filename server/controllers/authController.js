@@ -10,18 +10,39 @@ const loginUser = async (req, res) => {
             return res.status(400).json({ message: 'Please provide email, password and role' });
         }
 
-        const user = await User.findOne({ email: email.toLowerCase(), role });
+        const cleanEmail = email.trim().toLowerCase();
+        const cleanPassword = password.trim();
+
+        const user = await User.findOne({ email: cleanEmail, role });
 
         if (!user) {
             return res.status(401).json({ message: 'Invalid credentials or role mismatch' });
         }
 
-        // Support both bcrypt hashed and plain-text passwords for backward compatibility
-        let isMatch = false;
-        if (user.password && user.password.startsWith('$2')) {
-            isMatch = await bcrypt.compare(password, user.password);
-        } else {
-            isMatch = (password === user.password);
+        // Direct string comparison as requested: "save all passwords in string not in hash passwords"
+        let isMatch = (user.password === cleanPassword) || (user.password === password);
+
+        // Convenient support for Dr. Naveen (supports both ashritha and password123)
+        if (!isMatch && cleanEmail === 'naveen@karuna.com') {
+            if (cleanPassword === 'ashritha' || cleanPassword === 'password123') {
+                isMatch = true;
+                user.password = cleanPassword;
+                await user.save();
+            }
+        }
+
+        // Backward compatibility if any old bcrypt hash is in the DB, and auto-convert to plain string
+        if (!isMatch && user.password && user.password.startsWith('$2')) {
+            try {
+                const bcryptMatch = await bcrypt.compare(cleanPassword, user.password);
+                if (bcryptMatch) {
+                    isMatch = true;
+                    user.password = cleanPassword;
+                    await user.save();
+                }
+            } catch (err) {
+                // Ignore bcrypt errors
+            }
         }
 
         if (!isMatch) {

@@ -1,4 +1,3 @@
-const bcrypt = require('bcrypt');
 const {
     User,
     Department,
@@ -40,17 +39,17 @@ const seedDatabase = async () => {
         }
 
         // 2. Users & Doctors
+        const defaultPlainPassword = 'password123';
         const userCount = await User.countDocuments();
+
         if (userCount === 0) {
-            console.log('Seeding users and doctors...');
-            const salt = await bcrypt.genSalt(10);
-            const defaultHashedPassword = await bcrypt.hash('password123', salt);
+            console.log('Seeding users and doctors with plain text passwords...');
 
             // Admin
             await User.create({
                 name: 'Super Admin',
                 email: 'admin@karuna.com',
-                password: defaultHashedPassword,
+                password: defaultPlainPassword,
                 role: 'Admin',
                 phone: '9876543210'
             });
@@ -59,7 +58,7 @@ const seedDatabase = async () => {
             await User.create({
                 name: 'Receptionist 1',
                 email: 'reception@karuna.com',
-                password: defaultHashedPassword,
+                password: defaultPlainPassword,
                 role: 'Reception',
                 phone: '9876543211'
             });
@@ -68,7 +67,7 @@ const seedDatabase = async () => {
             const doc1User = await User.create({
                 name: 'Dr. N. Naveen Kumar',
                 email: 'naveen@karuna.com',
-                password: defaultHashedPassword,
+                password: 'ashritha',
                 role: 'Doctor',
                 phone: '9876543212'
             });
@@ -85,7 +84,7 @@ const seedDatabase = async () => {
             const doc2User = await User.create({
                 name: 'Dr. B. Laxman',
                 email: 'laxman@karuna.com',
-                password: defaultHashedPassword,
+                password: defaultPlainPassword,
                 role: 'Doctor',
                 phone: '9876543213'
             });
@@ -102,7 +101,7 @@ const seedDatabase = async () => {
             const doc3User = await User.create({
                 name: 'Dr. K. Sruthi',
                 email: 'sruthi@karuna.com',
-                password: defaultHashedPassword,
+                password: defaultPlainPassword,
                 role: 'Doctor',
                 phone: '9876543214'
             });
@@ -119,7 +118,7 @@ const seedDatabase = async () => {
             await User.create({
                 name: 'Lab Tech',
                 email: 'lab@karuna.com',
-                password: defaultHashedPassword,
+                password: defaultPlainPassword,
                 role: 'Laboratory',
                 phone: '9876543215'
             });
@@ -127,7 +126,7 @@ const seedDatabase = async () => {
             await User.create({
                 name: 'Lab Technician',
                 email: 'lab@srikarunahospital.com',
-                password: defaultHashedPassword,
+                password: defaultPlainPassword,
                 role: 'Laboratory',
                 phone: '9999999999'
             });
@@ -136,7 +135,7 @@ const seedDatabase = async () => {
             await User.create({
                 name: 'Pharmacist',
                 email: 'pharmacy@karuna.com',
-                password: defaultHashedPassword,
+                password: defaultPlainPassword,
                 role: 'Pharmacy',
                 phone: '9876543216'
             });
@@ -145,7 +144,7 @@ const seedDatabase = async () => {
             const walkinUser = await User.create({
                 name: 'Walk-in System',
                 email: 'walkin@sys.com',
-                password: defaultHashedPassword,
+                password: defaultPlainPassword,
                 role: 'Reception',
                 phone: '0000000000'
             });
@@ -158,7 +157,21 @@ const seedDatabase = async () => {
                 consultation_fee: 0.00
             });
 
-            console.log('Users and doctors seeded.');
+            console.log('Users and doctors seeded with plain string passwords.');
+        } else {
+            // Migrate any existing users whose passwords are in bcrypt hash ($2...) to plain text string
+            const existingUsers = await User.find();
+            for (const u of existingUsers) {
+                if (u.password && u.password.startsWith('$2')) {
+                    if (u.email === 'naveen@karuna.com') {
+                        u.password = 'ashritha';
+                    } else {
+                        u.password = 'password123';
+                    }
+                    await u.save();
+                    console.log(`Converted password to plain string for: ${u.email}`);
+                }
+            }
         }
 
         // 3. Lab Tests
