@@ -17,9 +17,12 @@ connectDB()
         console.error('MongoDB startup warning:', err.message);
     });
 
-// Middleware
+const allowedOrigins = process.env.FRONTEND_URL
+    ? (process.env.FRONTEND_URL.includes(',') ? process.env.FRONTEND_URL.split(',').map(s => s.trim()) : process.env.FRONTEND_URL)
+    : true;
+
 app.use(cors({
-    origin: process.env.FRONTEND_URL || '*',
+    origin: allowedOrigins,
     credentials: true
 }));
 app.use(express.json());
@@ -74,9 +77,10 @@ app.get('/api/health', async (req, res) => {
 
 // Serve React frontend in production
 if (process.env.NODE_ENV === 'production') {
-    app.use(express.static(path.join(__dirname, '../client/dist')));
-    app.get('*', (req, res) => {
-        res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
+    const clientDistPath = path.join(__dirname, '../client/dist');
+    app.use(express.static(clientDistPath));
+    app.get('{*splat}', (req, res) => {
+        res.sendFile(path.join(clientDistPath, 'index.html'));
     });
 }
 
