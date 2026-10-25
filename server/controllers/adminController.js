@@ -1,49 +1,99 @@
-const pool = require('../config/db');
+const bcrypt = require('bcrypt');
+const { User, Doctor, Department, Visit, Patient, PharmacyBill } = require('../models');
+
+// Helper to get formatted date string in IST
+const getISTDate = (daysAgo = 0) => {
+    const d = new Date(Date.now() + 5.5 * 60 * 60 * 1000 - daysAgo * 24 * 60 * 60 * 1000);
+    return d.toISOString().split('T')[0];
+};
 
 // @desc    Get Admin Dashboard Stats
 // @route   GET /api/admin/dashboard
 // @access  Private (Admin)
 const getAdminDashboardStats = async (req, res) => {
     try {
-        const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const today = getISTDate(0);
+        const sevenDaysAgo = getISTDate(7);
 
         // Today's Stats
-        const [[{ todaysOP }]] = await pool.query('SELECT COUNT(*) as todaysOP FROM visits WHERE visit_date = ?', [today]);
-        
-        const [[{ todaysRevenue }]] = await pool.query('SELECT SUM(consultation_fee) as todaysRevenue FROM visits WHERE visit_date = ?', [today]);
-        
-        const [[{ todaysPharmacySales }]] = await pool.query('SELECT SUM(net_amount) as todaysPharmacySales FROM pharmacy_bills WHERE bill_date = ?', [today]);
+        const todaysOP = await Visit.countDocuments({ visit_date: today });
+
+        const todaysRevenueAgg = await Visit.aggregate([
+            { $match: { visit_date: today } },
+            { $group: { _id: null, total: { $sum: '$consultation_fee' } } }
+        ]);
+        const todaysRevenue = todaysRevenueAgg[0]?.total || 0;
+
+        const todaysPharmacyAgg = await PharmacyBill.aggregate([
+            { $match: { bill_date: today } },
+            { $group: { _id: null, total: { $sum: '$net_amount' } } }
+        ]);
+        const todaysPharmacySales = todaysPharmacyAgg[0]?.total || 0;
 
         // Total Stats
-        const [[{ totalPatients }]] = await pool.query('SELECT COUNT(*) as totalPatients FROM patients');
-        const [[{ totalDoctors }]] = await pool.query('SELECT COUNT(*) as totalDoctors FROM doctors');
-        const [[{ totalRevenue }]] = await pool.query('SELECT SUM(consultation_fee) as totalRevenue FROM visits');
-        const [[{ totalPharmacySales }]] = await pool.query('SELECT SUM(net_amount) as totalPharmacySales FROM pharmacy_bills');
-        
+        const totalPatients = await Patient.countDocuments();
+        const totalDoctors = await Doctor.countDocuments();
+
+        const totalRevenueAgg = await Visit.aggregate([
+            { $group: { _id: null, total: { $sum: '$consultation_fee' } } }
+        ]);
+        const totalRevenue = totalRevenueAgg[0]?.total || 0;
+
+        const totalPharmacyAgg = await PharmacyBill.aggregate([
+            { $group: { _id: null, total: { $sum: '$net_amount' } } }
+        ]);
+        const totalPharmacySales = totalPharmacyAgg[0]?.total || 0;
+
         // Department Wise Patients (for Chart)
-        const [deptPatients] = await pool.query(
-            `SELECT dep.name, COUNT(v.id) as count 
-             FROM visits v
-             JOIN doctors d ON v.doctor_id = d.id
-             JOIN departments dep ON d.department_id = dep.id
-             GROUP BY dep.id`
-        );
+        const deptPatients = await Visit.aggregate([
+            {
+                $lookup: {
+                    from: 'doctors',
+                    localField: 'doctor_id',
+                    foreignField: '_id',
+                    as: 'doctor'
+                }
+            },
+            { $unwind: '$doctor' },
+            {
+                $lookup: {
+                    from: 'departments',
+                    localField: 'doctor.department_id',
+                    foreignField: '_id',
+                    as: 'department'
+                }
+            },
+            { $unwind: { path: '$department', preserveNullAndEmptyArrays: true } },
+            {
+                $group: {
+                    _id: { $ifNull: ['$department.name', '$doctor.specialization'] },
+                    count: { $sum: 1 }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    name: { $ifNull: ['$_id', 'General'] },
+                    count: 1
+                }
+            }
+        ]);
 
         // Daily OP Trend (last 7 days)
-        const [dailyOP] = await pool.query(
-            `SELECT visit_date as date, COUNT(*) as count 
-             FROM visits 
-             WHERE visit_date >= DATE_SUB(?, INTERVAL 7 DAY)
-             GROUP BY visit_date ORDER BY visit_date ASC`, [today]
-        );
+        const dailyOP = await Visit.aggregate([
+            { $match: { visit_date: { $gte: sevenDaysAgo } } },
+            { $group: { _id: '$visit_date', count: { $sum: 1 } } },
+            { $sort: { _id: 1 } },
+            { $project: { _id: 0, date: '$_id', count: 1 } }
+        ]);
 
         // Daily Revenue Trend (last 7 days)
-        const [dailyRevenue] = await pool.query(
-            `SELECT visit_date as date, SUM(consultation_fee) as revenue
-             FROM visits
-             WHERE visit_date >= DATE_SUB(?, INTERVAL 7 DAY)
-             GROUP BY visit_date ORDER BY visit_date ASC`, [today]
-        );
+        const dailyRevenue = await Visit.aggregate([
+            { $match: { visit_date: { $gte: sevenDaysAgo } } },
+            { $group: { _id: '$visit_date', revenue: { $sum: '$consultation_fee' } } },
+            { $sort: { _id: 1 } },
+            { $project: { _id: 0, date: '$_id', revenue: 1 } }
+        ]);
 
         res.json({
             stats: {
@@ -62,7 +112,7 @@ const getAdminDashboardStats = async (req, res) => {
         });
 
     } catch (error) {
-        console.error(error);
+        console.error('Admin stats error:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
@@ -72,15 +122,30 @@ const getAdminDashboardStats = async (req, res) => {
 // @access  Private (Admin)
 const getUsers = async (req, res) => {
     try {
-        const [users] = await pool.query(`
-            SELECT u.id, u.name, u.email, u.role, u.phone, u.created_at, d.specialization, d.consultation_fee 
-            FROM users u
-            LEFT JOIN doctors d ON u.id = d.user_id
-            ORDER BY u.created_at DESC
-        `);
-        res.json(users);
+        const users = await User.find().sort({ created_at: -1 });
+        const doctors = await Doctor.find();
+        const docMap = new Map();
+        doctors.forEach(d => {
+            if (d.user_id) docMap.set(d.user_id.toString(), d);
+        });
+
+        const usersWithDocInfo = users.map(u => {
+            const doc = docMap.get(u._id.toString());
+            return {
+                id: u._id.toString(),
+                name: u.name,
+                email: u.email,
+                role: u.role,
+                phone: u.phone,
+                created_at: u.created_at,
+                specialization: doc ? doc.specialization : null,
+                consultation_fee: doc ? doc.consultation_fee : null
+            };
+        });
+
+        res.json(usersWithDocInfo);
     } catch (error) {
-        console.error(error);
+        console.error('Error fetching users:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
@@ -91,33 +156,38 @@ const getUsers = async (req, res) => {
 const createUser = async (req, res) => {
     try {
         const { name, email, password, role, phone, specialization, consultation_fee } = req.body;
-        const bcrypt = require('bcrypt');
-        
-        const [existing] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
-        if (existing.length > 0) return res.status(400).json({ message: 'Email already exists' });
+
+        const existing = await User.findOne({ email: email.toLowerCase() });
+        if (existing) {
+            return res.status(400).json({ message: 'Email already exists' });
+        }
 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        const [result] = await pool.query(
-            'INSERT INTO users (name, email, password, role, phone) VALUES (?, ?, ?, ?, ?)',
-            [name, email, hashedPassword, role, phone]
-        );
+        const newUser = await User.create({
+            name,
+            email: email.toLowerCase(),
+            password: hashedPassword,
+            role,
+            phone
+        });
 
         if (role === 'Doctor') {
-            const [deps] = await pool.query('SELECT id FROM departments LIMIT 1');
-            const defaultDept = deps.length > 0 ? deps[0].id : null;
-            await pool.query(
-                'INSERT INTO doctors (user_id, doctor_name, specialization, consultation_fee, department_id) VALUES (?, ?, ?, ?, ?)',
-                [result.insertId, name, specialization || 'General Physician', consultation_fee || 0, defaultDept]
-            );
+            const defaultDept = await Department.findOne();
+            await Doctor.create({
+                user_id: newUser._id,
+                doctor_name: name,
+                specialization: specialization || 'General Physician',
+                consultation_fee: parseFloat(consultation_fee) || 0,
+                department_id: defaultDept ? defaultDept._id : null
+            });
         }
 
-        res.status(201).json({ message: 'User created successfully' });
+        res.status(201).json({ message: 'User created successfully', id: newUser._id.toString() });
     } catch (error) {
-        console.error(error);
-        require('fs').writeFileSync('error.txt', error.toString() + '\\n' + error.stack);
-        res.status(500).json({ message: 'Server error', error: error.message, stack: error.stack });
+        console.error('Error creating user:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
 
@@ -128,35 +198,41 @@ const updateUser = async (req, res) => {
     try {
         const { name, email, role, phone, password, specialization, consultation_fee } = req.body;
         const userId = req.params.id;
-        
-        let query = 'UPDATE users SET name=?, email=?, role=?, phone=? WHERE id=?';
-        let params = [name, email, role, phone, userId];
 
+        const updateData = { name, email: email ? email.toLowerCase() : undefined, role, phone };
         if (password) {
-            const bcrypt = require('bcrypt');
             const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(password, salt);
-            query = 'UPDATE users SET name=?, email=?, role=?, phone=?, password=? WHERE id=?';
-            params = [name, email, role, phone, hashedPassword, userId];
+            updateData.password = await bcrypt.hash(password, salt);
         }
 
-        await pool.query(query, params);
+        const user = await User.findByIdAndUpdate(userId, updateData, { new: true });
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
 
         if (role === 'Doctor') {
-            const [doc] = await pool.query('SELECT id FROM doctors WHERE user_id = ?', [userId]);
-            if (doc.length > 0) {
-                await pool.query('UPDATE doctors SET doctor_name = ?, specialization = ?, consultation_fee = ? WHERE user_id = ?', [name, specialization || 'General Physician', consultation_fee || 0, userId]);
+            const doc = await Doctor.findOne({ user_id: userId });
+            if (doc) {
+                doc.doctor_name = name;
+                doc.specialization = specialization || doc.specialization || 'General Physician';
+                doc.consultation_fee = consultation_fee !== undefined ? parseFloat(consultation_fee) : doc.consultation_fee;
+                await doc.save();
             } else {
-                const [deps] = await pool.query('SELECT id FROM departments LIMIT 1');
-                const defaultDept = deps.length > 0 ? deps[0].id : null;
-                await pool.query('INSERT INTO doctors (user_id, doctor_name, specialization, consultation_fee, department_id) VALUES (?, ?, ?, ?, ?)', [userId, name, specialization || 'General Physician', consultation_fee || 0, defaultDept]);
+                const defaultDept = await Department.findOne();
+                await Doctor.create({
+                    user_id: userId,
+                    doctor_name: name,
+                    specialization: specialization || 'General Physician',
+                    consultation_fee: parseFloat(consultation_fee) || 0,
+                    department_id: defaultDept ? defaultDept._id : null
+                });
             }
         }
 
         res.json({ message: 'User updated successfully' });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Server error', error: error.message, stack: error.stack });
+        console.error('Error updating user:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
 
@@ -165,10 +241,12 @@ const updateUser = async (req, res) => {
 // @access  Private (Admin)
 const deleteUser = async (req, res) => {
     try {
-        await pool.query('DELETE FROM users WHERE id=?', [req.params.id]);
+        const userId = req.params.id;
+        await User.findByIdAndDelete(userId);
+        await Doctor.deleteMany({ user_id: userId });
         res.json({ message: 'User deleted successfully' });
     } catch (error) {
-        console.error(error);
+        console.error('Error deleting user:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };

@@ -1,15 +1,20 @@
-const pool = require('../config/db');
+const { MedicineInventory, PharmacyBill, PharmacyBillItem, Prescription, PrescriptionMedicine, Visit, Patient, Doctor } = require('../models');
+
+const getISTDate = () => {
+    const d = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+    return d.toISOString().split('T')[0];
+};
 
 // @desc    Get all medicines in inventory
 // @route   GET /api/pharmacy/inventory
 // @access  Private
 const getInventory = async (req, res) => {
     try {
-        const [medicines] = await pool.query('SELECT * FROM medicine_inventory ORDER BY name ASC');
+        const medicines = await MedicineInventory.find().sort({ name: 1 });
         res.json(medicines);
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Server error' });
+        console.error('Error fetching inventory:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
 
@@ -21,16 +26,24 @@ const searchMedicine = async (req, res) => {
         const { q } = req.query;
         if (!q) return res.status(400).json({ message: 'Search query required' });
 
-        const [medicines] = await pool.query(
-            `SELECT * FROM medicine_inventory 
-             WHERE name LIKE ? OR category LIKE ? OR batch_number LIKE ?
-             AND current_stock > 0`,
-            [`%${q}%`, `%${q}%`, `%${q}%`]
-        );
+        const regex = new RegExp(q, 'i');
+        const medicines = await MedicineInventory.find({
+            $and: [
+                {
+                    $or: [
+                        { name: regex },
+                        { category: regex },
+                        { batch_number: regex }
+                    ]
+                },
+                { current_stock: { $gt: 0 } }
+            ]
+        });
+
         res.json(medicines);
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Server error' });
+        console.error('Error searching medicine:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
 
@@ -41,53 +54,63 @@ const createBill = async (req, res) => {
     try {
         const { patient_id, prescription_id, total_amount, discount, gst, net_amount, payment_method, items } = req.body;
 
-        // Generate Bill Number
-        const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0].replace(/-/g, '');
-        const [lastBill] = await pool.query('SELECT bill_number FROM pharmacy_bills ORDER BY id DESC LIMIT 1');
-        
-        let nextNumber = 1;
-        if (lastBill.length > 0) {
-            const lastNum = lastBill[0].bill_number.split('-')[1];
-            if(lastNum) nextNumber = parseInt(lastNum) + 1;
-        }
-        const bill_number = `PHM${today}-${nextNumber.toString().padStart(4, '0')}`;
+        const todayDate = getISTDate();
+        const dateCode = todayDate.replace(/-/g, '');
 
-        const todayDate = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
+        // Generate Bill Number: PHM20261025-0001
+        const lastBill = await PharmacyBill.findOne().sort({ created_at: -1, _id: -1 });
+        let nextNumber = 1;
+        if (lastBill && lastBill.bill_number) {
+            const parts = lastBill.bill_number.split('-');
+            if (parts.length > 1) {
+                const parsed = parseInt(parts[1], 10);
+                if (!isNaN(parsed)) nextNumber = parsed + 1;
+            }
+        }
+        const bill_number = `PHM${dateCode}-${String(nextNumber).padStart(4, '0')}`;
 
         // 1. Create Bill Record
-        const [billResult] = await pool.query(
-            `INSERT INTO pharmacy_bills 
-             (patient_id, bill_number, bill_date, total_amount, discount, gst, net_amount, payment_method) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [patient_id || null, bill_number, todayDate, total_amount, discount, gst, net_amount, payment_method]
-        );
-
-        const billId = billResult.insertId;
+        const bill = await PharmacyBill.create({
+            patient_id: patient_id || null,
+            bill_number,
+            bill_date: todayDate,
+            total_amount: Number(total_amount) || 0,
+            discount: Number(discount) || 0,
+            gst: Number(gst) || 0,
+            net_amount: Number(net_amount) || 0,
+            payment_method: payment_method || 'Cash'
+        });
 
         // 2. Add Bill Items and Reduce Stock
-        for (let item of items) {
-            await pool.query(
-                `INSERT INTO pharmacy_bill_items 
-                 (bill_id, medicine_id, quantity, price, total) 
-                 VALUES (?, ?, ?, ?, ?)`,
-                [billId, item.medicine_id, item.quantity, item.price, item.total]
-            );
+        if (items && items.length > 0) {
+            for (const item of items) {
+                await PharmacyBillItem.create({
+                    bill_id: bill._id,
+                    medicine_id: item.medicine_id,
+                    quantity: Number(item.quantity) || 1,
+                    price: Number(item.price) || 0,
+                    total: Number(item.total) || 0
+                });
 
-            // Reduce stock
-            await pool.query(
-                `UPDATE medicine_inventory SET current_stock = current_stock - ? WHERE id = ?`,
-                [item.quantity, item.medicine_id]
-            );
+                // Reduce stock
+                await MedicineInventory.findByIdAndUpdate(item.medicine_id, {
+                    $inc: { current_stock: -Math.abs(Number(item.quantity) || 1) }
+                });
+            }
         }
 
         if (prescription_id) {
-            await pool.query('UPDATE prescriptions SET status = ? WHERE id = ?', ['Billed', prescription_id]);
+            await Prescription.findByIdAndUpdate(prescription_id, { status: 'Billed' });
         }
 
-        res.status(201).json({ message: 'Bill generated successfully', billId, bill_number });
+        res.status(201).json({
+            message: 'Bill generated successfully',
+            billId: bill._id.toString(),
+            bill_number
+        });
 
     } catch (error) {
-        console.error(error);
+        console.error('Error creating pharmacy bill:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
@@ -97,36 +120,69 @@ const createBill = async (req, res) => {
 // @access  Private (Pharmacy)
 const getPendingPrescriptions = async (req, res) => {
     try {
-        const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
-        
-        const [prescriptions] = await pool.query(
-            `SELECT pr.id, pr.created_at, v.op_token, p.id as patient_id, p.name as patient_name, p.patient_id as patient_code, 
-                    d.doctor_name, pr.diagnosis
-             FROM prescriptions pr
-             JOIN visits v ON pr.visit_id = v.id
-             JOIN patients p ON v.patient_id = p.id
-             JOIN doctors d ON v.doctor_id = d.id
-             WHERE DATE(pr.created_at) = ? AND pr.status = 'Pending'
-             ORDER BY pr.created_at DESC`,
-            [today]
-        );
+        const today = getISTDate();
+        const startOfDay = new Date(today + 'T00:00:00.000Z');
+        const endOfDay = new Date(today + 'T23:59:59.999Z');
 
-        // Get medicines for each prescription
-        for (let pr of prescriptions) {
-            const [medicines] = await pool.query(
-                `SELECT pm.*, mi.selling_price as price, mi.current_stock 
-                 FROM prescription_medicines pm
-                 LEFT JOIN medicine_inventory mi ON pm.medicine_id = mi.id
-                 WHERE pm.prescription_id = ?`,
-                [pr.id]
-            );
-            pr.medicines = medicines;
+        const prescriptions = await Prescription.find({
+            status: 'Pending',
+            created_at: { $gte: startOfDay, $lte: endOfDay }
+        })
+            .populate({
+                path: 'visit_id',
+                populate: [
+                    { path: 'patient_id' },
+                    { path: 'doctor_id' }
+                ]
+            })
+            .sort({ created_at: -1 });
+
+        const formatted = [];
+        for (const pr of prescriptions) {
+            const visit = pr.visit_id;
+            const patient = visit ? visit.patient_id : null;
+            const doctor = visit ? visit.doctor_id : null;
+
+            // Get medicines for each prescription
+            const medicines = await PrescriptionMedicine.find({ prescription_id: pr._id }).populate('medicine_id');
+            const formattedMeds = medicines.map(pm => {
+                const medInv = pm.medicine_id;
+                return {
+                    id: pm._id.toString(),
+                    _id: pm._id.toString(),
+                    prescription_id: pm.prescription_id.toString(),
+                    medicine_id: medInv ? medInv._id.toString() : null,
+                    medicine_name: pm.medicine_name,
+                    dosage: pm.dosage,
+                    morning: pm.morning,
+                    afternoon: pm.afternoon,
+                    night: pm.night,
+                    before_food: pm.before_food,
+                    after_food: pm.after_food,
+                    duration: pm.duration,
+                    price: medInv ? medInv.selling_price : 0,
+                    current_stock: medInv ? medInv.current_stock : 0
+                };
+            });
+
+            formatted.push({
+                id: pr._id.toString(),
+                _id: pr._id.toString(),
+                created_at: pr.created_at,
+                op_token: visit ? visit.op_token : '',
+                patient_id: patient ? patient._id.toString() : null,
+                patient_name: patient ? patient.name : 'Unknown',
+                patient_code: patient ? patient.patient_id : '',
+                doctor_name: doctor ? doctor.doctor_name : '',
+                diagnosis: pr.diagnosis,
+                medicines: formattedMeds
+            });
         }
 
-        res.json(prescriptions);
+        res.json(formatted);
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Server error' });
+        console.error('Error fetching pending prescriptions:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
 
@@ -136,17 +192,21 @@ const getPendingPrescriptions = async (req, res) => {
 const addMedicine = async (req, res) => {
     try {
         const { name, category, minimum_stock, selling_price, mrp, current_stock, expiry_date, unit } = req.body;
-        
-        await pool.query(
-            `INSERT INTO medicine_inventory 
-             (name, category, minimum_stock, selling_price, mrp, current_stock, expiry_date, unit) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [name, category, minimum_stock || 10, selling_price, mrp, current_stock || 0, expiry_date || null, unit || 'Tablet']
-        );
-        
-        res.status(201).json({ message: 'Medicine added successfully' });
+
+        const medicine = await MedicineInventory.create({
+            name,
+            category: category || 'General',
+            minimum_stock: minimum_stock !== undefined ? Number(minimum_stock) : 10,
+            selling_price: Number(selling_price) || 0,
+            mrp: Number(mrp) || 0,
+            current_stock: Number(current_stock) || 0,
+            expiry_date: expiry_date || null,
+            unit: unit || 'Tablet'
+        });
+
+        res.status(201).json({ message: 'Medicine added successfully', id: medicine._id.toString() });
     } catch (error) {
-        console.error(error);
+        console.error('Error adding medicine:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
@@ -158,17 +218,29 @@ const updateMedicine = async (req, res) => {
     try {
         const { id } = req.params;
         const { name, category, minimum_stock, selling_price, mrp, current_stock, expiry_date, unit } = req.body;
-        
-        await pool.query(
-            `UPDATE medicine_inventory 
-             SET name=?, category=?, minimum_stock=?, selling_price=?, mrp=?, current_stock=?, expiry_date=?, unit=? 
-             WHERE id=?`,
-            [name, category, minimum_stock || 10, selling_price, mrp, current_stock || 0, expiry_date || null, unit || 'Tablet', id]
+
+        const medicine = await MedicineInventory.findByIdAndUpdate(
+            id,
+            {
+                name,
+                category: category || 'General',
+                minimum_stock: minimum_stock !== undefined ? Number(minimum_stock) : 10,
+                selling_price: Number(selling_price) || 0,
+                mrp: Number(mrp) || 0,
+                current_stock: Number(current_stock) || 0,
+                expiry_date: expiry_date || null,
+                unit: unit || 'Tablet'
+            },
+            { new: true }
         );
-        
+
+        if (!medicine) {
+            return res.status(404).json({ message: 'Medicine not found' });
+        }
+
         res.json({ message: 'Medicine updated successfully' });
     } catch (error) {
-        console.error(error);
+        console.error('Error updating medicine:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };

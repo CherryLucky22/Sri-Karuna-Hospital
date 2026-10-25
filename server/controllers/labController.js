@@ -1,11 +1,17 @@
-const pool = require('../config/db');
+const { LabTest, LabReport, Patient, Visit, Doctor, User, Department } = require('../models');
+
+const getISTDate = () => {
+    const d = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+    return d.toISOString().split('T')[0];
+};
 
 // Get catalog of all lab tests
 exports.getAllLabTests = async (req, res) => {
     try {
-        const [tests] = await pool.query('SELECT * FROM lab_tests ORDER BY category, name');
+        const tests = await LabTest.find().sort({ category: 1, name: 1 });
         res.json(tests);
     } catch (error) {
+        console.error('Error fetching lab tests:', error);
         res.status(500).json({ message: 'Error fetching lab tests', error: error.message });
     }
 };
@@ -14,12 +20,14 @@ exports.getAllLabTests = async (req, res) => {
 exports.prescribeLabTest = async (req, res) => {
     const { visitId, testId, remarks } = req.body;
     try {
-        await pool.query(
-            'INSERT INTO lab_reports (visit_id, test_id, remarks) VALUES (?, ?, ?)',
-            [visitId, testId, remarks]
-        );
+        await LabReport.create({
+            visit_id: visitId,
+            test_id: testId,
+            remarks: remarks || ''
+        });
         res.status(201).json({ message: 'Lab test prescribed successfully' });
     } catch (error) {
+        console.error('Error prescribing lab test:', error);
         res.status(500).json({ message: 'Error prescribing lab test', error: error.message });
     }
 };
@@ -27,21 +35,49 @@ exports.prescribeLabTest = async (req, res) => {
 // Lab Technician fetches reports (Pending or Completed)
 exports.getLabReports = async (req, res) => {
     try {
-        const [reports] = await pool.query(`
-            SELECT 
-                lr.id, lr.visit_id, lr.test_id, lr.result_value, lr.remarks, lr.lab_remarks, lr.status, lr.updated_at,
-                lt.name as test_name, lt.category, lt.normal_range, lt.unit,
-                v.doctor_id, d.name as doctor_name,
-                p.patient_id as patient_code, p.name as patient_name, p.age, p.gender
-            FROM lab_reports lr
-            JOIN lab_tests lt ON lr.test_id = lt.id
-            JOIN visits v ON lr.visit_id = v.id
-            LEFT JOIN users d ON v.doctor_id = d.id
-            JOIN patients p ON v.patient_id = p.id
-            ORDER BY lr.updated_at DESC
-        `);
-        res.json(reports);
+        const reports = await LabReport.find()
+            .populate('test_id')
+            .populate({
+                path: 'visit_id',
+                populate: [
+                    { path: 'patient_id' },
+                    { path: 'doctor_id' }
+                ]
+            })
+            .sort({ updated_at: -1 });
+
+        const formatted = reports.map(lr => {
+            const visit = lr.visit_id;
+            const patient = visit ? visit.patient_id : null;
+            const doctor = visit ? visit.doctor_id : null;
+            const test = lr.test_id;
+
+            return {
+                id: lr._id.toString(),
+                _id: lr._id.toString(),
+                visit_id: visit ? visit._id.toString() : null,
+                test_id: test ? test._id.toString() : null,
+                result_value: lr.result_value,
+                remarks: lr.remarks,
+                lab_remarks: lr.lab_remarks,
+                status: lr.status,
+                updated_at: lr.updated_at,
+                test_name: test ? test.name : 'Unknown Test',
+                category: test ? test.category : '',
+                normal_range: test ? test.normal_range : '',
+                unit: test ? test.unit : '',
+                doctor_id: doctor ? doctor._id.toString() : null,
+                doctor_name: doctor ? doctor.doctor_name : '',
+                patient_code: patient ? patient.patient_id : '',
+                patient_name: patient ? patient.name : 'Unknown',
+                age: patient ? patient.age : null,
+                gender: patient ? patient.gender : null
+            };
+        });
+
+        res.json(formatted);
     } catch (error) {
+        console.error('Error fetching lab reports:', error);
         res.status(500).json({ message: 'Error fetching lab reports', error: error.message });
     }
 };
@@ -50,14 +86,25 @@ exports.getLabReports = async (req, res) => {
 exports.updateLabReport = async (req, res) => {
     const { id } = req.params;
     const { result_value, labRemarks, status } = req.body;
-    
+
     try {
-        await pool.query(
-            'UPDATE lab_reports SET result_value = ?, lab_remarks = ?, status = ? WHERE id = ?',
-            [result_value, labRemarks, status || 'Completed', id]
+        const report = await LabReport.findByIdAndUpdate(
+            id,
+            {
+                result_value,
+                lab_remarks: labRemarks,
+                status: status || 'Completed'
+            },
+            { new: true }
         );
+
+        if (!report) {
+            return res.status(404).json({ message: 'Lab report not found' });
+        }
+
         res.json({ message: 'Lab report updated successfully' });
     } catch (error) {
+        console.error('Error updating lab report:', error);
         res.status(500).json({ message: 'Error updating lab report', error: error.message });
     }
 };
@@ -65,64 +112,75 @@ exports.updateLabReport = async (req, res) => {
 // Add Walk-in Lab Test
 exports.addWalkInTest = async (req, res) => {
     const { name, mobile_number, age, gender, tests, payment_method } = req.body;
-    const connection = await pool.getConnection();
 
     try {
         if (!name || !mobile_number || !tests || tests.length === 0) {
             return res.status(400).json({ message: 'Missing required fields or tests' });
         }
 
-        await connection.beginTransaction();
-
         // 1. Check if patient exists
-        let patientId;
-        const [existingPatient] = await connection.query(
-            'SELECT id FROM patients WHERE mobile_number = ?',
-            [mobile_number]
-        );
-
-        if (existingPatient.length > 0) {
-            patientId = existingPatient[0].id;
-        } else {
-            // Create new patient
-            const [patientCount] = await connection.query('SELECT COUNT(*) as count FROM patients');
-            const newPatientIdStr = `SKH${String(patientCount[0].count + 1).padStart(6, '0')}`;
-            
-            const [newPatient] = await connection.query(
-                'INSERT INTO patients (patient_id, name, age, gender, mobile_number) VALUES (?, ?, ?, ?, ?)',
-                [newPatientIdStr, name, age || null, gender || null, mobile_number]
-            );
-            patientId = newPatient.insertId;
+        let patient = await Patient.findOne({ mobile_number });
+        if (!patient) {
+            const count = await Patient.countDocuments();
+            const newPatientIdStr = `SKH${String(count + 1).padStart(6, '0')}`;
+            patient = await Patient.create({
+                patient_id: newPatientIdStr,
+                name,
+                age: age || null,
+                gender: gender || null,
+                mobile_number
+            });
         }
 
-        // 2. The Dummy Doctor ID for Walk-ins is 4 (Self / Walk-in)
-        const doctorId = 4; 
-        const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
-        
-        // 3. Create dummy visit
-        const [visitResult] = await connection.query(
-            `INSERT INTO visits (patient_id, doctor_id, op_token, visit_date, visit_time, consultation_fee, payment_method, status)
-             VALUES (?, ?, ?, ?, CURTIME(), ?, ?, ?)`,
-            [patientId, doctorId, 'LAB-WALKIN', today, 0, payment_method || 'Cash', 'Completed']
-        );
-        const visitId = visitResult.insertId;
-
-        // 4. Create lab reports for each test
-        if (tests && tests.length > 0) {
-            for (const testId of tests) {
-                await connection.query(
-                    'INSERT INTO lab_reports (visit_id, test_id) VALUES (?, ?)',
-                    [visitId, testId]
-                );
+        // 2. Find or create Walk-in doctor
+        let walkInDoctor = await Doctor.findOne({ doctor_name: 'Self / Walk-in' });
+        if (!walkInDoctor) {
+            let walkInUser = await User.findOne({ email: 'walkin@sys.com' });
+            if (!walkInUser) {
+                walkInUser = await User.create({
+                    name: 'Walk-in System',
+                    email: 'walkin@sys.com',
+                    password: 'none',
+                    role: 'Reception',
+                    phone: '0000000000'
+                });
             }
+            const dept = await Department.findOne();
+            walkInDoctor = await Doctor.create({
+                user_id: walkInUser._id,
+                doctor_name: 'Self / Walk-in',
+                specialization: '-',
+                consultation_fee: 0,
+                department_id: dept ? dept._id : null
+            });
         }
 
-        await connection.commit();
-        res.status(201).json({ message: 'Walk-in test created successfully', visitId });
+        // 3. Create dummy visit
+        const today = getISTDate();
+        const visit_time = new Date().toTimeString().split(' ')[0];
+
+        const visit = await Visit.create({
+            patient_id: patient._id,
+            doctor_id: walkInDoctor._id,
+            op_token: 'LAB-WALKIN',
+            visit_date: today,
+            visit_time,
+            consultation_fee: 0,
+            payment_method: payment_method || 'Cash',
+            status: 'Completed'
+        });
+
+        // 4. Create lab reports
+        for (const testId of tests) {
+            await LabReport.create({
+                visit_id: visit._id,
+                test_id: testId
+            });
+        }
+
+        res.status(201).json({ message: 'Walk-in test created successfully', visitId: visit._id.toString() });
     } catch (error) {
-        await connection.rollback();
+        console.error('Error creating walk-in test:', error);
         res.status(500).json({ message: 'Error creating walk-in test', error: error.message });
-    } finally {
-        connection.release();
     }
 };

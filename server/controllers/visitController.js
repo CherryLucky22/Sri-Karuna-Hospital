@@ -1,4 +1,9 @@
-const pool = require('../config/db');
+const { Visit, Doctor, Department, Patient, Vitals } = require('../models');
+
+const getISTDate = () => {
+    const d = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+    return d.toISOString().split('T')[0];
+};
 
 // @desc    Create a visit (OP Registration)
 // @route   POST /api/visits
@@ -8,48 +13,53 @@ const createVisit = async (req, res) => {
         const { patient_id, doctor_id, consultation_fee, payment_method, notes } = req.body;
 
         // Get Department Code for OP Token
-        const [doctorInfo] = await pool.query(
-            `SELECT d.id, dep.code 
-             FROM doctors d 
-             JOIN departments dep ON d.department_id = dep.id 
-             WHERE d.id = ?`, [doctor_id]
-        );
+        const doctor = await Doctor.findById(doctor_id).populate('department_id');
+        if (!doctor) {
+            return res.status(404).json({ message: 'Doctor not found' });
+        }
 
-        if (doctorInfo.length === 0) return res.status(404).json({ message: 'Doctor not found' });
-        const deptCode = doctorInfo[0].code;
+        const deptCode = (doctor.department_id && doctor.department_id.code)
+            ? doctor.department_id.code
+            : 'OP';
 
         // Generate OP Token
-        const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const [lastVisit] = await pool.query(
-            `SELECT op_token FROM visits 
-             WHERE doctor_id = ? AND visit_date = ? 
-             ORDER BY id DESC LIMIT 1`, [doctor_id, today]
-        );
-        
-        let nextTokenNum = 1;
-        if (lastVisit.length > 0) {
-            const lastToken = lastVisit[0].op_token;
-            nextTokenNum = parseInt(lastToken.replace(deptCode, '')) + 1;
-        }
-        const op_token = `${deptCode}${nextTokenNum.toString().padStart(3, '0')}`;
+        const today = getISTDate();
+        const lastVisit = await Visit.findOne({
+            doctor_id: doctor._id,
+            visit_date: today
+        }).sort({ created_at: -1, _id: -1 });
 
+        let nextTokenNum = 1;
+        if (lastVisit && lastVisit.op_token) {
+            const numPart = parseInt(lastVisit.op_token.replace(deptCode, ''), 10);
+            if (!isNaN(numPart)) {
+                nextTokenNum = numPart + 1;
+            }
+        }
+        const op_token = `${deptCode}${String(nextTokenNum).padStart(3, '0')}`;
         const visit_time = new Date().toTimeString().split(' ')[0]; // HH:MM:SS
 
-        const [result] = await pool.query(
-            `INSERT INTO visits 
-            (patient_id, doctor_id, op_token, visit_date, visit_time, consultation_fee, payment_status, payment_method, notes, status) 
-            VALUES (?, ?, ?, ?, ?, ?, 'Paid', ?, ?, 'Waiting')`,
-            [patient_id, doctor_id, op_token, today, visit_time, consultation_fee, payment_method, notes]
-        );
+        const visit = await Visit.create({
+            patient_id,
+            doctor_id,
+            op_token,
+            visit_date: today,
+            visit_time,
+            consultation_fee: Number(consultation_fee) || 0,
+            payment_status: 'Paid',
+            payment_method: payment_method || 'Cash',
+            notes: notes || '',
+            status: 'Waiting'
+        });
 
         res.status(201).json({
             message: 'Visit created successfully',
-            visitId: result.insertId,
+            visitId: visit._id.toString(),
             op_token
         });
 
     } catch (error) {
-        console.error(error);
+        console.error('Error creating visit:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
@@ -61,40 +71,37 @@ const addVitals = async (req, res) => {
     try {
         const visit_id = req.params.id;
         let { heart_rate, blood_pressure, temperature, height, weight, spo2, respiratory_rate } = req.body;
-        
-        height = height === '' ? null : height;
-        weight = weight === '' ? null : weight;
+
+        const numHeight = height !== '' && height !== null && height !== undefined ? Number(height) : null;
+        const numWeight = weight !== '' && weight !== null && weight !== undefined ? Number(weight) : null;
 
         // Calculate BMI
         let bmi = null;
-        if (height && weight) {
-            const heightInMeters = height / 100;
-            bmi = (weight / (heightInMeters * heightInMeters)).toFixed(2);
+        if (numHeight && numWeight) {
+            const heightInMeters = numHeight / 100;
+            bmi = Number((numWeight / (heightInMeters * heightInMeters)).toFixed(2));
         }
 
-        // Check if vitals already exist
-        const [existing] = await pool.query('SELECT id FROM vitals WHERE visit_id = ?', [visit_id]);
-
-        if (existing.length > 0) {
-            await pool.query(
-                `UPDATE vitals SET 
-                 heart_rate=?, blood_pressure=?, temperature=?, height=?, weight=?, bmi=?, spo2=?, respiratory_rate=?
-                 WHERE visit_id=?`,
-                [heart_rate || null, blood_pressure || null, temperature || null, height, weight, bmi, spo2 || null, respiratory_rate || null, visit_id]
-            );
-        } else {
-            await pool.query(
-                `INSERT INTO vitals 
-                 (visit_id, heart_rate, blood_pressure, temperature, height, weight, bmi, spo2, respiratory_rate)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [visit_id, heart_rate || null, blood_pressure || null, temperature || null, height, weight, bmi, spo2 || null, respiratory_rate || null]
-            );
-        }
+        const vitals = await Vitals.findOneAndUpdate(
+            { visit_id },
+            {
+                visit_id,
+                heart_rate: heart_rate || null,
+                blood_pressure: blood_pressure || null,
+                temperature: temperature || null,
+                height: numHeight,
+                weight: numWeight,
+                bmi,
+                spo2: spo2 || null,
+                respiratory_rate: respiratory_rate || null
+            },
+            { upsert: true, new: true }
+        );
 
         res.json({ message: 'Vitals saved successfully', bmi });
 
     } catch (error) {
-        console.error(error);
+        console.error('Error saving vitals:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
@@ -104,20 +111,44 @@ const addVitals = async (req, res) => {
 // @access  Private
 const getTodayVisits = async (req, res) => {
     try {
-        const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const [visits] = await pool.query(
-            `SELECT v.*, p.name as patient_name, p.patient_id as patient_code, p.mobile_number, 
-             d.doctor_name, dep.name as department_name
-             FROM visits v
-             JOIN patients p ON v.patient_id = p.id
-             JOIN doctors d ON v.doctor_id = d.id
-             JOIN departments dep ON d.department_id = dep.id
-             WHERE v.visit_date = ? ORDER BY v.visit_time DESC`,
-            [today]
-        );
-        res.json(visits);
+        const today = getISTDate();
+        const visits = await Visit.find({ visit_date: today })
+            .populate('patient_id')
+            .populate({
+                path: 'doctor_id',
+                populate: { path: 'department_id' }
+            })
+            .sort({ visit_time: -1, created_at: -1 });
+
+        const formatted = visits.map(v => {
+            const patient = v.patient_id;
+            const doctor = v.doctor_id;
+            const dept = doctor ? doctor.department_id : null;
+
+            return {
+                id: v._id.toString(),
+                _id: v._id.toString(),
+                patient_id: patient ? patient._id.toString() : null,
+                doctor_id: doctor ? doctor._id.toString() : null,
+                op_token: v.op_token,
+                visit_date: v.visit_date,
+                visit_time: v.visit_time,
+                consultation_fee: v.consultation_fee,
+                payment_status: v.payment_status,
+                payment_method: v.payment_method,
+                notes: v.notes,
+                status: v.status,
+                patient_name: patient ? patient.name : 'Unknown',
+                patient_code: patient ? patient.patient_id : '',
+                mobile_number: patient ? patient.mobile_number : '',
+                doctor_name: doctor ? doctor.doctor_name : '',
+                department_name: dept ? dept.name : (doctor ? doctor.specialization : '')
+            };
+        });
+
+        res.json(formatted);
     } catch (error) {
-        console.error(error);
+        console.error('Error fetching today visits:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };

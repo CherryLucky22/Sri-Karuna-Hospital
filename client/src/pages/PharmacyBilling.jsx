@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { Pill, User, Clock, FileText, CheckCircle } from 'lucide-react';
+import { Pill, User, Clock, FileText, CheckCircle, Calendar, Sparkles } from 'lucide-react';
 
 const PharmacyBilling = () => {
     const [prescriptions, setPrescriptions] = useState([]);
@@ -91,8 +91,12 @@ const PharmacyBilling = () => {
         }
     };
 
+    const [currentTime, setCurrentTime] = useState(new Date());
+
     useEffect(() => {
         fetchPendingPrescriptions();
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(timer);
     }, []);
 
     const fetchPendingPrescriptions = async () => {
@@ -108,13 +112,30 @@ const PharmacyBilling = () => {
     };
 
     return (
-        <div className="h-full">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-                <Pill className="text-primary w-6 h-6" />
-                Pharmacy Billing & Prescriptions
-            </h2>
+        <div className="h-full space-y-6">
+            {/* Command Center Header */}
+            <div className="card border-none bg-gradient-to-r from-[#d81b60] to-[#880e4f] text-white p-8 flex flex-col md:flex-row justify-between items-center animate-fade-in-up" style={{ animationDelay: '0ms' }}>
+                <div>
+                    <h2 className="text-3xl font-black tracking-tight mb-2 flex items-center gap-2">
+                        Pharmacy Command Center <Sparkles className="w-5 h-5 text-pink-300" />
+                    </h2>
+                    <p className="text-pink-100 font-medium tracking-wide">Manage prescriptions and direct billing.</p>
+                </div>
+                <div className="flex flex-wrap gap-4 mt-6 md:mt-0 items-center">
+                    <div className="flex gap-4">
+                        <div className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl backdrop-blur-md">
+                            <Calendar className="w-5 h-5 text-pink-200" />
+                            <span className="font-semibold">{currentTime.toLocaleDateString('en-IN', { dateStyle: 'medium' })}</span>
+                        </div>
+                        <div className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl backdrop-blur-md">
+                            <Clock className="w-5 h-5 text-pink-200" />
+                            <span className="font-mono font-bold text-lg">{currentTime.toLocaleTimeString('en-IN', { timeStyle: 'short' })}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-            <div className="flex flex-col md:flex-row gap-6">
+            <div className="flex flex-col md:flex-row gap-6 animate-fade-in-up" style={{ animationDelay: '100ms' }}>
                 
                 {/* Pending Prescriptions List */}
                 <div className="md:w-1/3 flex flex-col gap-4">

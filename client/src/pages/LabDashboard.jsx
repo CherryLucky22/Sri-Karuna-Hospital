@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { Activity, Search, Save, CheckCircle, FileText, HeartPulse, Printer, Plus, X } from 'lucide-react';
+import { Activity, Search, Save, CheckCircle, FileText, HeartPulse, Printer, Plus, X, Calendar, Clock, Sparkles } from 'lucide-react';
 
 const LabDashboard = () => {
     const [reports, setReports] = useState([]);
@@ -44,9 +44,14 @@ const LabDashboard = () => {
         }
     };
 
+    const [currentTime, setCurrentTime] = useState(new Date());
+
     useEffect(() => {
         fetchReports();
         fetchTests();
+        
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(timer);
     }, []);
 
     const handleSelectReport = (report) => {
@@ -108,17 +113,33 @@ const LabDashboard = () => {
     const completedToday = completedReports.filter(r => new Date(r.updated_at).toDateString() === todayStr);
 
     return (
-        <div className="p-8">
-            <div className="flex justify-between items-center mb-8 print:hidden">
-                <h1 className="text-3xl font-extrabold text-[#0a192f] flex items-center gap-3">
-                    <HeartPulse className="w-8 h-8 text-[#d32f2f]" /> Laboratory Dashboard
-                </h1>
-                <button 
-                    onClick={() => setShowWalkInModal(true)} 
-                    className="bg-[#b71c1c] hover:bg-[#d32f2f] text-white px-5 py-2.5 rounded-xl font-bold shadow-md transition-colors flex items-center gap-2"
-                >
-                    <Plus className="w-5 h-5" /> New Walk-in Test
-                </button>
+        <div className="p-8 space-y-6 bg-gray-50/30 min-h-screen">
+            {/* Command Center Header */}
+            <div className="card border-none bg-gradient-to-r from-red-900 to-[#0a192f] text-white p-8 flex flex-col md:flex-row justify-between items-center animate-fade-in-up print:hidden" style={{ animationDelay: '0ms' }}>
+                <div>
+                    <h2 className="text-3xl font-black tracking-tight mb-2 flex items-center gap-2">
+                        Laboratory Command Center <Sparkles className="w-5 h-5 text-red-400" />
+                    </h2>
+                    <p className="text-red-100 font-medium tracking-wide">Manage pending tests and print reports efficiently.</p>
+                </div>
+                <div className="flex flex-wrap gap-4 mt-6 md:mt-0 items-center">
+                    <div className="flex gap-4">
+                        <div className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl backdrop-blur-md">
+                            <Calendar className="w-5 h-5 text-red-200" />
+                            <span className="font-semibold">{currentTime.toLocaleDateString('en-IN', { dateStyle: 'medium' })}</span>
+                        </div>
+                        <div className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl backdrop-blur-md">
+                            <Clock className="w-5 h-5 text-red-200" />
+                            <span className="font-mono font-bold text-lg">{currentTime.toLocaleTimeString('en-IN', { timeStyle: 'short' })}</span>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={() => setShowWalkInModal(true)} 
+                        className="bg-red-500 hover:bg-red-600 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg transition-transform hover:-translate-y-0.5 flex items-center gap-2 border-none"
+                    >
+                        <Plus className="w-5 h-5" /> New Walk-in Test
+                    </button>
+                </div>
             </div>
 
             {/* Print View */}
@@ -240,57 +261,34 @@ const LabDashboard = () => {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8 print:hidden">
-                <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-red-50 p-6 flex justify-between relative overflow-hidden group">
-                    <div>
-                        <p className="text-sm font-bold text-gray-800 mb-1">Pending Tests</p>
-                        <p className="text-4xl font-extrabold text-[#0a192f]">{pendingReports.length}</p>
-                        <p className="text-xs text-gray-400 mt-2 font-medium tracking-wide">Awaiting processing</p>
-                    </div>
-                    <div className="w-14 h-14 rounded-full border-2 border-red-100 flex items-center justify-center bg-red-50/50">
-                        <Activity className="w-7 h-7 text-[#d32f2f]" />
-                    </div>
-                    <Activity className="absolute -bottom-4 -right-2 w-16 h-16 text-red-50 opacity-50 transform rotate-12" />
+            {/* Bento Grid Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 print:hidden">
+                <div className="card border-none bg-gradient-to-br from-red-50/80 to-white/50 relative overflow-hidden group shadow-md hover:shadow-xl p-6 animate-fade-in-up" style={{ animationDelay: '100ms' }}>
+                    <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-red-200/40 rounded-full blur-2xl group-hover:bg-red-300/50 transition-colors"></div>
+                    <p className="text-xs text-red-700 mb-2 flex items-center gap-2 font-bold relative z-10 uppercase tracking-widest"><Activity className="w-4 h-4"/> Pending</p>
+                    <h3 className="text-4xl font-black text-gray-800 relative z-10 tracking-tight">{pendingReports.length}</h3>
                 </div>
                 
-                <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-blue-50 p-6 flex justify-between relative overflow-hidden group">
-                    <div>
-                        <p className="text-sm font-bold text-gray-800 mb-1">Completed Today</p>
-                        <p className="text-4xl font-extrabold text-[#0a192f]">{completedToday.length}</p>
-                        <p className="text-xs text-gray-400 mt-2 font-medium tracking-wide">Tests completed</p>
-                    </div>
-                    <div className="w-14 h-14 rounded-full border-2 border-blue-100 flex items-center justify-center bg-blue-50/50">
-                        <FileText className="w-7 h-7 text-blue-500" />
-                    </div>
-                    <CheckCircle className="absolute -bottom-4 -right-2 w-16 h-16 text-blue-50 opacity-50 transform rotate-12" />
+                <div className="card border-none bg-gradient-to-br from-blue-50/80 to-white/50 relative overflow-hidden group shadow-md hover:shadow-xl p-6 animate-fade-in-up" style={{ animationDelay: '200ms' }}>
+                    <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-blue-200/40 rounded-full blur-2xl group-hover:bg-blue-300/50 transition-colors"></div>
+                    <p className="text-xs text-blue-700 mb-2 flex items-center gap-2 font-bold relative z-10 uppercase tracking-widest"><CheckCircle className="w-4 h-4"/> Completed Today</p>
+                    <h3 className="text-4xl font-black text-gray-800 relative z-10 tracking-tight">{completedToday.length}</h3>
                 </div>
 
-                <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-green-50 p-6 flex justify-between relative overflow-hidden group">
-                    <div>
-                        <p className="text-sm font-bold text-gray-800 mb-1">Total Tests</p>
-                        <p className="text-4xl font-extrabold text-[#0a192f]">{reports.length}</p>
-                        <p className="text-xs text-gray-400 mt-2 font-medium tracking-wide">This month</p>
-                    </div>
-                    <div className="w-14 h-14 rounded-full border-2 border-green-100 flex items-center justify-center bg-green-50/50">
-                        <Activity className="w-7 h-7 text-green-500" />
-                    </div>
-                    <Activity className="absolute -bottom-4 -right-2 w-16 h-16 text-green-50 opacity-50 transform rotate-12" />
+                <div className="card border-none bg-gradient-to-br from-green-50/80 to-white/50 relative overflow-hidden group shadow-md hover:shadow-xl p-6 animate-fade-in-up" style={{ animationDelay: '300ms' }}>
+                    <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-green-200/40 rounded-full blur-2xl group-hover:bg-green-300/50 transition-colors"></div>
+                    <p className="text-xs text-green-700 mb-2 flex items-center gap-2 font-bold relative z-10 uppercase tracking-widest"><FileText className="w-4 h-4"/> Total Tests</p>
+                    <h3 className="text-4xl font-black text-gray-800 relative z-10 tracking-tight">{reports.length}</h3>
                 </div>
 
-                <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-purple-50 p-6 flex justify-between relative overflow-hidden group">
-                    <div>
-                        <p className="text-sm font-bold text-gray-800 mb-1">Reports Printed</p>
-                        <p className="text-4xl font-extrabold text-[#0a192f]">{completedReports.length}</p>
-                        <p className="text-xs text-gray-400 mt-2 font-medium tracking-wide">This month</p>
-                    </div>
-                    <div className="w-14 h-14 rounded-full border-2 border-purple-100 flex items-center justify-center bg-purple-50/50">
-                        <Printer className="w-7 h-7 text-purple-500" />
-                    </div>
-                    <Printer className="absolute -bottom-4 -right-2 w-16 h-16 text-purple-50 opacity-50 transform rotate-12" />
+                <div className="card border-none bg-gradient-to-br from-purple-50/80 to-white/50 relative overflow-hidden group shadow-md hover:shadow-xl p-6 animate-fade-in-up" style={{ animationDelay: '400ms' }}>
+                    <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-purple-200/40 rounded-full blur-2xl group-hover:bg-purple-300/50 transition-colors"></div>
+                    <p className="text-xs text-purple-700 mb-2 flex items-center gap-2 font-bold relative z-10 uppercase tracking-widest"><Printer className="w-4 h-4"/> Printed</p>
+                    <h3 className="text-4xl font-black text-gray-800 relative z-10 tracking-tight">{completedReports.length}</h3>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 print:hidden">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 print:hidden animate-fade-in-up" style={{ animationDelay: '500ms' }}>
                 <div className="lg:col-span-2 space-y-6">
                     <div>
                         <div className="flex justify-between items-center mb-4">

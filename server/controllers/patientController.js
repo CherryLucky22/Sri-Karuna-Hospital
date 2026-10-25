@@ -1,4 +1,4 @@
-const pool = require('../config/db');
+const { Patient, Visit, Doctor, Department, Vitals, Prescription, PrescriptionMedicine, LabReport, LabTest, PharmacyBill } = require('../models');
 
 // @desc    Register a new patient
 // @route   POST /api/patients
@@ -11,49 +11,41 @@ const registerPatient = async (req, res) => {
         } = req.body;
 
         // Generate Patient ID (e.g., SKH000001)
-        const [lastPatient] = await pool.query('SELECT patient_id FROM patients ORDER BY id DESC LIMIT 1');
+        const lastPatient = await Patient.findOne().sort({ created_at: -1, _id: -1 });
         let nextNumber = 1;
-        if (lastPatient.length > 0) {
-            const lastId = lastPatient[0].patient_id;
-            nextNumber = parseInt(lastId.replace('SKH', '')) + 1;
+        if (lastPatient && lastPatient.patient_id) {
+            const numPart = parseInt(lastPatient.patient_id.replace('SKH', ''), 10);
+            if (!isNaN(numPart)) {
+                nextNumber = numPart + 1;
+            }
         }
-        const patient_id = `SKH${nextNumber.toString().padStart(6, '0')}`;
+        const patient_id = `SKH${String(nextNumber).padStart(6, '0')}`;
 
-        const patientData = [
-            patient_id, 
-            name, 
-            age, 
-            gender, 
-            dob === '' ? null : dob, 
-            blood_group === '' ? null : blood_group, 
-            mobile_number, 
-            alternative_mobile === '' ? null : alternative_mobile, 
-            address === '' ? null : address, 
-            village === '' ? null : village, 
-            city === '' ? null : city, 
-            district === '' ? null : district, 
-            state === '' ? null : state, 
-            occupation === '' ? null : occupation, 
-            emergency_contact === '' ? null : emergency_contact
-        ];
-
-        const [result] = await pool.query(
-            `INSERT INTO patients 
-            (patient_id, name, age, gender, dob, blood_group, mobile_number, alternative_mobile, address, village, city, district, state, occupation, emergency_contact) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            patientData
-        );
+        const patient = await Patient.create({
+            patient_id,
+            name,
+            age: age !== '' && age !== undefined ? Number(age) : null,
+            gender: gender || null,
+            dob: dob || null,
+            blood_group: blood_group || null,
+            mobile_number,
+            alternative_mobile: alternative_mobile || null,
+            address: address || null,
+            village: village || null,
+            city: city || null,
+            district: district || null,
+            state: state || null,
+            occupation: occupation || null,
+            emergency_contact: emergency_contact || null
+        });
 
         res.status(201).json({
             message: 'Patient registered successfully',
-            patientId: result.insertId,
+            patientId: patient._id.toString(),
             generated_patient_id: patient_id
         });
     } catch (error) {
-        console.error(error);
-        if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(400).json({ message: 'Patient with this mobile number already exists' });
-        }
+        console.error('Error registering patient:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
@@ -66,16 +58,19 @@ const searchPatient = async (req, res) => {
         const { q } = req.query;
         if (!q) return res.status(400).json({ message: 'Search query required' });
 
-        const [patients] = await pool.query(
-            `SELECT * FROM patients 
-             WHERE mobile_number LIKE ? OR patient_id LIKE ? OR name LIKE ?`,
-            [`%${q}%`, `%${q}%`, `%${q}%`]
-        );
+        const regex = new RegExp(q, 'i');
+        const patients = await Patient.find({
+            $or: [
+                { mobile_number: regex },
+                { patient_id: regex },
+                { name: regex }
+            ]
+        }).limit(20);
 
         res.json(patients);
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Server error' });
+        console.error('Error searching patient:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
 
@@ -86,57 +81,69 @@ const getPatientHistory = async (req, res) => {
     try {
         const patientId = req.params.id;
 
-        // Get Patient Info
-        const [patient] = await pool.query('SELECT * FROM patients WHERE id = ?', [patientId]);
-        if (patient.length === 0) return res.status(404).json({ message: 'Patient not found' });
+        const patient = await Patient.findById(patientId);
+        if (!patient) return res.status(404).json({ message: 'Patient not found' });
 
-        // Get Visits with Doctor and Vitals
-        const [visits] = await pool.query(
-            `SELECT v.*, d.qualifications, d.doctor_name, dep.name as department_name 
-             FROM visits v
-             JOIN doctors d ON v.doctor_id = d.id
-             JOIN departments dep ON d.department_id = dep.id
-             WHERE v.patient_id = ? ORDER BY v.visit_date DESC`,
-            [patientId]
-        );
+        const visits = await Visit.find({ patient_id: patient._id })
+            .populate({
+                path: 'doctor_id',
+                populate: { path: 'department_id' }
+            })
+            .sort({ visit_date: -1, created_at: -1 });
 
-        for (let visit of visits) {
-            // Get Vitals
-            const [vitals] = await pool.query('SELECT * FROM vitals WHERE visit_id = ?', [visit.id]);
-            visit.vitals = vitals.length > 0 ? vitals[0] : null;
+        const formattedVisits = [];
+        for (const visit of visits) {
+            const vObj = visit.toObject();
+            const doctor = visit.doctor_id;
+            const dept = doctor ? doctor.department_id : null;
 
-            // Get Prescription
-            const [prescriptions] = await pool.query('SELECT * FROM prescriptions WHERE visit_id = ?', [visit.id]);
-            if (prescriptions.length > 0) {
-                const prescription = prescriptions[0];
-                const [medicines] = await pool.query('SELECT * FROM prescription_medicines WHERE prescription_id = ?', [prescription.id]);
-                prescription.medicines = medicines;
-                visit.prescription = prescription;
+            vObj.doctor_name = doctor ? doctor.doctor_name : 'Unknown';
+            vObj.qualifications = doctor ? doctor.qualifications : '';
+            vObj.department_name = dept ? dept.name : (doctor ? doctor.specialization : '');
+
+            // Vitals
+            const vitals = await Vitals.findOne({ visit_id: visit._id });
+            vObj.vitals = vitals ? vitals.toObject() : null;
+
+            // Prescription
+            const prescription = await Prescription.findOne({ visit_id: visit._id });
+            if (prescription) {
+                const medicines = await PrescriptionMedicine.find({ prescription_id: prescription._id });
+                const pObj = prescription.toObject();
+                pObj.medicines = medicines.map(m => m.toObject());
+                vObj.prescription = pObj;
             } else {
-                visit.prescription = null;
+                vObj.prescription = null;
             }
 
-            // Get Lab Reports
-            const [labReports] = await pool.query(
-                `SELECT lr.*, lt.name as test_name 
-                 FROM lab_reports lr
-                 JOIN lab_tests lt ON lr.test_id = lt.id
-                 WHERE lr.visit_id = ?`, [visit.id]
-            );
-            visit.lab_reports = labReports;
+            // Lab Reports
+            const labReports = await LabReport.find({ visit_id: visit._id }).populate('test_id');
+            vObj.lab_reports = labReports.map(lr => ({
+                id: lr._id.toString(),
+                visit_id: lr.visit_id.toString(),
+                test_id: lr.test_id ? lr.test_id._id.toString() : null,
+                test_name: lr.test_id ? lr.test_id.name : '',
+                result_value: lr.result_value,
+                remarks: lr.remarks,
+                lab_remarks: lr.lab_remarks,
+                status: lr.status,
+                created_at: lr.created_at,
+                updated_at: lr.updated_at
+            }));
+
+            formattedVisits.push(vObj);
         }
 
-        // Get Pharmacy Bills
-        const [bills] = await pool.query('SELECT * FROM pharmacy_bills WHERE patient_id = ? ORDER BY bill_date DESC', [patientId]);
+        const bills = await PharmacyBill.find({ patient_id: patient._id }).sort({ bill_date: -1, created_at: -1 });
 
         res.json({
-            patient: patient[0],
-            visits,
-            pharmacy_bills: bills
+            patient: patient.toObject(),
+            visits: formattedVisits,
+            pharmacy_bills: bills.map(b => b.toObject())
         });
 
     } catch (error) {
-        console.error(error);
+        console.error('Error fetching patient history:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
