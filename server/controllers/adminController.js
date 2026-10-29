@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const { User, Doctor, Department, Visit, Patient, PharmacyBill } = require('../models');
 
@@ -6,6 +7,9 @@ const getISTDate = (daysAgo = 0) => {
     const d = new Date(Date.now() + 5.5 * 60 * 60 * 1000 - daysAgo * 24 * 60 * 60 * 1000);
     return d.toISOString().split('T')[0];
 };
+
+const VALID_ROLES = ['Admin', 'Reception', 'Doctor', 'Laboratory', 'Pharmacy'];
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // @desc    Get Admin Dashboard Stats
 // @route   GET /api/admin/dashboard
@@ -113,7 +117,7 @@ const getAdminDashboardStats = async (req, res) => {
 
     } catch (error) {
         console.error('Admin stats error:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error retrieving dashboard stats' });
     }
 };
 
@@ -146,7 +150,7 @@ const getUsers = async (req, res) => {
         res.json(usersWithDocInfo);
     } catch (error) {
         console.error('Error fetching users:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error retrieving users' });
     }
 };
 
@@ -157,24 +161,43 @@ const createUser = async (req, res) => {
     try {
         const { name, email, password, role, phone, specialization, consultation_fee } = req.body;
 
-        const existing = await User.findOne({ email: email.toLowerCase() });
+        if (!name || !email || !password || !role) {
+            return res.status(400).json({ message: 'Name, email, password, and role are required' });
+        }
+
+        const cleanEmail = String(email).trim().toLowerCase();
+        if (!EMAIL_REGEX.test(cleanEmail)) {
+            return res.status(400).json({ message: 'Invalid email address format' });
+        }
+
+        if (!VALID_ROLES.includes(role)) {
+            return res.status(400).json({ message: 'Invalid role' });
+        }
+
+        if (String(password).length < 6) {
+            return res.status(400).json({ message: 'Password must be at least 6 characters long' });
+        }
+
+        const existing = await User.findOne({ email: cleanEmail });
         if (existing) {
             return res.status(400).json({ message: 'Email already exists' });
         }
 
-        const newUser = await User.create({
-            name,
-            email: email.toLowerCase(),
-            password: password,
+        const newUser = new User({
+            name: String(name).trim(),
+            email: cleanEmail,
+            password: String(password).trim(),
             role,
-            phone
+            phone: phone ? String(phone).trim() : ''
         });
+
+        await newUser.save(); // pre-save hook securely hashes password with bcrypt
 
         if (role === 'Doctor') {
             const defaultDept = await Department.findOne();
             await Doctor.create({
                 user_id: newUser._id,
-                doctor_name: name,
+                doctor_name: newUser.name,
                 specialization: specialization || 'General Physician',
                 consultation_fee: parseFloat(consultation_fee) || 0,
                 department_id: defaultDept ? defaultDept._id : null
@@ -184,7 +207,7 @@ const createUser = async (req, res) => {
         res.status(201).json({ message: 'User created successfully', id: newUser._id.toString() });
     } catch (error) {
         console.error('Error creating user:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error creating user' });
     }
 };
 
@@ -196,20 +219,48 @@ const updateUser = async (req, res) => {
         const { name, email, role, phone, password, specialization, consultation_fee } = req.body;
         const userId = req.params.id;
 
-        const updateData = { name, email: email ? email.toLowerCase() : undefined, role, phone };
-        if (password) {
-            updateData.password = password;
+        if (!mongoose.Types.ObjectId.isValid(userId)) {
+            return res.status(400).json({ message: 'Invalid user ID' });
         }
 
-        const user = await User.findByIdAndUpdate(userId, updateData, { new: true });
+        const user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        if (role === 'Doctor') {
+        if (name) user.name = String(name).trim();
+        if (email) {
+            const cleanEmail = String(email).trim().toLowerCase();
+            if (!EMAIL_REGEX.test(cleanEmail)) {
+                return res.status(400).json({ message: 'Invalid email format' });
+            }
+            // Check if email taken by someone else
+            const existing = await User.findOne({ email: cleanEmail, _id: { $ne: userId } });
+            if (existing) {
+                return res.status(400).json({ message: 'Email is already used by another account' });
+            }
+            user.email = cleanEmail;
+        }
+        if (role) {
+            if (!VALID_ROLES.includes(role)) {
+                return res.status(400).json({ message: 'Invalid role' });
+            }
+            user.role = role;
+        }
+        if (phone !== undefined) user.phone = String(phone).trim();
+        if (password) {
+            if (String(password).length < 6) {
+                return res.status(400).json({ message: 'Password must be at least 6 characters long' });
+            }
+            user.password = String(password).trim();
+        }
+
+        await user.save();
+
+        if (user.role === 'Doctor') {
             const doc = await Doctor.findOne({ user_id: userId });
             if (doc) {
-                doc.doctor_name = name;
+                if (name) doc.doctor_name = String(name).trim();
                 doc.specialization = specialization || doc.specialization || 'General Physician';
                 doc.consultation_fee = consultation_fee !== undefined ? parseFloat(consultation_fee) : doc.consultation_fee;
                 await doc.save();
@@ -217,7 +268,7 @@ const updateUser = async (req, res) => {
                 const defaultDept = await Department.findOne();
                 await Doctor.create({
                     user_id: userId,
-                    doctor_name: name,
+                    doctor_name: user.name,
                     specialization: specialization || 'General Physician',
                     consultation_fee: parseFloat(consultation_fee) || 0,
                     department_id: defaultDept ? defaultDept._id : null
@@ -228,7 +279,7 @@ const updateUser = async (req, res) => {
         res.json({ message: 'User updated successfully' });
     } catch (error) {
         console.error('Error updating user:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error updating user' });
     }
 };
 
@@ -238,13 +289,24 @@ const updateUser = async (req, res) => {
 const deleteUser = async (req, res) => {
     try {
         const userId = req.params.id;
+
+        if (!mongoose.Types.ObjectId.isValid(userId)) {
+            return res.status(400).json({ message: 'Invalid user ID' });
+        }
+
+        if (req.user && req.user.id === userId) {
+            return res.status(400).json({ message: 'You cannot delete your own active admin account' });
+        }
+
         await User.findByIdAndDelete(userId);
         await Doctor.deleteMany({ user_id: userId });
         res.json({ message: 'User deleted successfully' });
     } catch (error) {
         console.error('Error deleting user:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error deleting user' });
     }
 };
+
+module.exports = { getAdminDashboardStats, getUsers, createUser, updateUser, deleteUser };
 
 module.exports = { getAdminDashboardStats, getUsers, createUser, updateUser, deleteUser };

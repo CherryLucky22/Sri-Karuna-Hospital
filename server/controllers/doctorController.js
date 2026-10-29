@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const { Doctor, Visit, Patient, Vitals, Prescription, PrescriptionMedicine, LabReport, LabTest, PharmacyBill, Department } = require('../models');
 
 const getISTDate = (daysAgo = 0) => {
@@ -121,7 +122,7 @@ const getDoctorDashboard = async (req, res) => {
 
     } catch (error) {
         console.error('Doctor dashboard error:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error retrieving doctor dashboard' });
     }
 };
 
@@ -132,23 +133,27 @@ const savePrescription = async (req, res) => {
     try {
         const { visit_id, chief_complaint, history, clinical_findings, diagnosis, advice, follow_up_date, medicines } = req.body;
 
+        if (!visit_id || !mongoose.Types.ObjectId.isValid(visit_id)) {
+            return res.status(400).json({ message: 'Valid visit ID is required' });
+        }
+
         const prescription = await Prescription.create({
             visit_id,
-            chief_complaint,
-            history,
-            clinical_findings,
-            diagnosis,
-            advice,
+            chief_complaint: chief_complaint ? String(chief_complaint).slice(0, 500) : '',
+            history: history ? String(history).slice(0, 500) : '',
+            clinical_findings: clinical_findings ? String(clinical_findings).slice(0, 500) : '',
+            diagnosis: diagnosis ? String(diagnosis).slice(0, 500) : '',
+            advice: advice ? String(advice).slice(0, 500) : '',
             follow_up_date: follow_up_date || null
         });
 
         // Save medicines
-        if (medicines && medicines.length > 0) {
+        if (medicines && Array.isArray(medicines) && medicines.length > 0) {
             const medDocs = medicines.map(med => ({
                 prescription_id: prescription._id,
-                medicine_id: med.medicine_id || null,
-                medicine_name: med.medicine_name,
-                dosage: med.dosage || '',
+                medicine_id: med.medicine_id && mongoose.Types.ObjectId.isValid(med.medicine_id) ? med.medicine_id : null,
+                medicine_name: String(med.medicine_name || '').slice(0, 150),
+                dosage: med.dosage ? String(med.dosage).slice(0, 50) : '',
                 morning: !!med.morning,
                 afternoon: !!med.afternoon,
                 night: !!med.night,
@@ -169,16 +174,20 @@ const savePrescription = async (req, res) => {
 
     } catch (error) {
         console.error('Save prescription error:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error saving prescription' });
     }
 };
 
 // @desc    Get complete prescription summary for a visit
 // @route   GET /api/doctors/prescription-summary/:visitId
-// @access  Private (Doctor)
+// @access  Private (Doctor, Pharmacy, Reception, Admin)
 const getPrescriptionSummary = async (req, res) => {
     try {
         const { visitId } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(visitId)) {
+            return res.status(400).json({ message: 'Invalid visit ID' });
+        }
 
         const prescription = await Prescription.findOne({ visit_id: visitId }).sort({ created_at: -1 });
 
@@ -210,7 +219,7 @@ const getPrescriptionSummary = async (req, res) => {
 
     } catch (error) {
         console.error('Prescription summary error:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error retrieving prescription summary' });
     }
 };
 
@@ -230,13 +239,13 @@ const getDoctorsList = async (req, res) => {
         res.json(formatted);
     } catch (error) {
         console.error('Doctors list error:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error retrieving doctors list' });
     }
 };
 
 // @desc    Get hospital analysis (Revenue and Patients)
 // @route   GET /api/doctors/analysis
-// @access  Private (Doctor)
+// @access  Private (Doctor, Admin)
 const getHospitalAnalysis = async (req, res) => {
     try {
         const today = getISTDate(0);
@@ -352,8 +361,10 @@ const getHospitalAnalysis = async (req, res) => {
 
     } catch (error) {
         console.error('Hospital analysis error:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error retrieving hospital analysis' });
     }
 };
+
+module.exports = { getDoctorDashboard, savePrescription, getDoctorsList, getPrescriptionSummary, getHospitalAnalysis };
 
 module.exports = { getDoctorDashboard, savePrescription, getDoctorsList, getPrescriptionSummary, getHospitalAnalysis };

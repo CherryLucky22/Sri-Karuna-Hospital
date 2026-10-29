@@ -19,4 +19,19 @@ api.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
+// Response interceptor to handle token expiry / unauthenticated responses
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response && error.response.status === 401) {
+            // Clear invalid session
+            localStorage.removeItem('token');
+            if (window.location.pathname !== '/login') {
+                window.location.href = '/login';
+            }
+        }
+        return Promise.reject(error);
+    }
+);
+
 export default api;

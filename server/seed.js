@@ -1,3 +1,4 @@
+const bcrypt = require('bcrypt');
 const {
     User,
     Department,
@@ -8,7 +9,7 @@ const {
 
 const seedDatabase = async () => {
     try {
-        console.log('Checking database seed status...');
+        console.log('Checking database seed and security status...');
 
         // 1. Departments
         const deptCount = await Department.countDocuments();
@@ -39,8 +40,8 @@ const seedDatabase = async () => {
         }
 
         // 2. Users & Doctors
-        const defaultPlainPassword = 'password123';
         const userCount = await User.countDocuments();
+        const defaultPlainPassword = 'password123';
 
         if (userCount === 0) {
             console.log('Seeding users and doctors with plain text passwords...');
@@ -159,7 +160,7 @@ const seedDatabase = async () => {
 
             console.log('Users and doctors seeded with plain string passwords.');
         } else {
-            // Migrate any existing users whose passwords are in bcrypt hash ($2...) to plain text string
+            // Save passwords as plain string visible in MongoDB as requested
             const existingUsers = await User.find();
             for (const u of existingUsers) {
                 if (u.password && u.password.startsWith('$2')) {
@@ -169,7 +170,7 @@ const seedDatabase = async () => {
                         u.password = 'password123';
                     }
                     await u.save();
-                    console.log(`Converted password to plain string for: ${u.email}`);
+                    console.log(`\x1b[32m✔ Converted password to plain visible string for:\x1b[0m ${u.email}`);
                 }
             }
         }

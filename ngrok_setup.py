@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from pyngrok import ngrok, conf
 
@@ -8,9 +9,10 @@ logging.getLogger("pyngrok").setLevel(logging.CRITICAL)
 # Set the region to India ('in') to reduce latency and avoid connection timeouts
 conf.get_default().region = "in"
 
-# Start a tunnel on port 3000 (your Vite frontend port)
-# Your auth token is already saved, but we can set it again to be safe
-ngrok.set_auth_token('3GECH1P6ZcPRc7RSEoM5SuJptMQ_6oDyMgtKXrmjUoUP9Zv88')
+# Set auth token from environment variable if provided
+auth_token = os.environ.get('NGROK_AUTHTOKEN')
+if auth_token:
+    ngrok.set_auth_token(auth_token)
 
 print("Starting ngrok tunnel on port 3000...")
 try:

@@ -1,4 +1,5 @@
 const { MedicineInventory, PharmacyBill, PharmacyBillItem, Prescription, PrescriptionMedicine, Visit, Patient, Doctor } = require('../models');
+const { escapeRegex } = require('../middleware/validateMiddleware');
 
 const getISTDate = () => {
     const d = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
@@ -14,7 +15,7 @@ const getInventory = async (req, res) => {
         res.json(medicines);
     } catch (error) {
         console.error('Error fetching inventory:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error retrieving inventory' });
     }
 };
 
@@ -24,9 +25,12 @@ const getInventory = async (req, res) => {
 const searchMedicine = async (req, res) => {
     try {
         const { q } = req.query;
-        if (!q) return res.status(400).json({ message: 'Search query required' });
+        if (!q || typeof q !== 'string' || q.trim() === '') {
+            return res.status(400).json({ message: 'Search query required' });
+        }
 
-        const regex = new RegExp(q, 'i');
+        const safeQuery = escapeRegex(q.trim().slice(0, 100));
+        const regex = new RegExp(safeQuery, 'i');
         const medicines = await MedicineInventory.find({
             $and: [
                 {
@@ -38,12 +42,12 @@ const searchMedicine = async (req, res) => {
                 },
                 { current_stock: { $gt: 0 } }
             ]
-        });
+        }).limit(50);
 
         res.json(medicines);
     } catch (error) {
         console.error('Error searching medicine:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error searching medicine' });
     }
 };
 
@@ -74,27 +78,29 @@ const createBill = async (req, res) => {
             patient_id: patient_id || null,
             bill_number,
             bill_date: todayDate,
-            total_amount: Number(total_amount) || 0,
-            discount: Number(discount) || 0,
-            gst: Number(gst) || 0,
-            net_amount: Number(net_amount) || 0,
+            total_amount: Math.max(0, Number(total_amount) || 0),
+            discount: Math.max(0, Number(discount) || 0),
+            gst: Math.max(0, Number(gst) || 0),
+            net_amount: Math.max(0, Number(net_amount) || 0),
             payment_method: payment_method || 'Cash'
         });
 
         // 2. Add Bill Items and Reduce Stock
-        if (items && items.length > 0) {
+        if (items && Array.isArray(items) && items.length > 0) {
             for (const item of items) {
+                if (!item.medicine_id) continue;
+                const qty = Math.max(1, Math.floor(Number(item.quantity) || 1));
                 await PharmacyBillItem.create({
                     bill_id: bill._id,
                     medicine_id: item.medicine_id,
-                    quantity: Number(item.quantity) || 1,
-                    price: Number(item.price) || 0,
-                    total: Number(item.total) || 0
+                    quantity: qty,
+                    price: Math.max(0, Number(item.price) || 0),
+                    total: Math.max(0, Number(item.total) || 0)
                 });
 
-                // Reduce stock
+                // Reduce stock safely
                 await MedicineInventory.findByIdAndUpdate(item.medicine_id, {
-                    $inc: { current_stock: -Math.abs(Number(item.quantity) || 1) }
+                    $inc: { current_stock: -qty }
                 });
             }
         }
@@ -111,7 +117,7 @@ const createBill = async (req, res) => {
 
     } catch (error) {
         console.error('Error creating pharmacy bill:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error creating pharmacy bill' });
     }
 };
 
@@ -182,7 +188,7 @@ const getPendingPrescriptions = async (req, res) => {
         res.json(formatted);
     } catch (error) {
         console.error('Error fetching pending prescriptions:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error retrieving pending prescriptions' });
     }
 };
 
@@ -193,21 +199,25 @@ const addMedicine = async (req, res) => {
     try {
         const { name, category, minimum_stock, selling_price, mrp, current_stock, expiry_date, unit } = req.body;
 
+        if (!name || String(name).trim() === '') {
+            return res.status(400).json({ message: 'Medicine name is required' });
+        }
+
         const medicine = await MedicineInventory.create({
-            name,
-            category: category || 'General',
-            minimum_stock: minimum_stock !== undefined ? Number(minimum_stock) : 10,
-            selling_price: Number(selling_price) || 0,
-            mrp: Number(mrp) || 0,
-            current_stock: Number(current_stock) || 0,
+            name: String(name).trim().slice(0, 150),
+            category: category ? String(category).trim().slice(0, 50) : 'General',
+            minimum_stock: minimum_stock !== undefined ? Math.max(0, Number(minimum_stock)) : 10,
+            selling_price: Math.max(0, Number(selling_price) || 0),
+            mrp: Math.max(0, Number(mrp) || 0),
+            current_stock: Math.max(0, Number(current_stock) || 0),
             expiry_date: expiry_date || null,
-            unit: unit || 'Tablet'
+            unit: unit ? String(unit).trim().slice(0, 30) : 'Tablet'
         });
 
         res.status(201).json({ message: 'Medicine added successfully', id: medicine._id.toString() });
     } catch (error) {
         console.error('Error adding medicine:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error adding medicine' });
     }
 };
 
@@ -222,14 +232,14 @@ const updateMedicine = async (req, res) => {
         const medicine = await MedicineInventory.findByIdAndUpdate(
             id,
             {
-                name,
-                category: category || 'General',
-                minimum_stock: minimum_stock !== undefined ? Number(minimum_stock) : 10,
-                selling_price: Number(selling_price) || 0,
-                mrp: Number(mrp) || 0,
-                current_stock: Number(current_stock) || 0,
+                name: name ? String(name).trim().slice(0, 150) : undefined,
+                category: category ? String(category).trim().slice(0, 50) : 'General',
+                minimum_stock: minimum_stock !== undefined ? Math.max(0, Number(minimum_stock)) : 10,
+                selling_price: Math.max(0, Number(selling_price) || 0),
+                mrp: Math.max(0, Number(mrp) || 0),
+                current_stock: Math.max(0, Number(current_stock) || 0),
                 expiry_date: expiry_date || null,
-                unit: unit || 'Tablet'
+                unit: unit ? String(unit).trim().slice(0, 30) : 'Tablet'
             },
             { new: true }
         );
@@ -241,8 +251,10 @@ const updateMedicine = async (req, res) => {
         res.json({ message: 'Medicine updated successfully' });
     } catch (error) {
         console.error('Error updating medicine:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error updating medicine' });
     }
 };
+
+module.exports = { getInventory, searchMedicine, createBill, getPendingPrescriptions, addMedicine, updateMedicine };
 
 module.exports = { getInventory, searchMedicine, createBill, getPendingPrescriptions, addMedicine, updateMedicine };

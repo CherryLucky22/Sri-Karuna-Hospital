@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const { Visit, Doctor, Department, Patient, Vitals } = require('../models');
 
 const getISTDate = () => {
@@ -7,10 +8,17 @@ const getISTDate = () => {
 
 // @desc    Create a visit (OP Registration)
 // @route   POST /api/visits
-// @access  Private (Reception)
+// @access  Private (Reception, Admin)
 const createVisit = async (req, res) => {
     try {
         const { patient_id, doctor_id, consultation_fee, payment_method, notes } = req.body;
+
+        if (!patient_id || !mongoose.Types.ObjectId.isValid(patient_id)) {
+            return res.status(400).json({ message: 'Valid patient ID is required' });
+        }
+        if (!doctor_id || !mongoose.Types.ObjectId.isValid(doctor_id)) {
+            return res.status(400).json({ message: 'Valid doctor ID is required' });
+        }
 
         // Get Department Code for OP Token
         const doctor = await Doctor.findById(doctor_id).populate('department_id');
@@ -45,10 +53,10 @@ const createVisit = async (req, res) => {
             op_token,
             visit_date: today,
             visit_time,
-            consultation_fee: Number(consultation_fee) || 0,
+            consultation_fee: Math.max(0, Number(consultation_fee) || 0),
             payment_status: 'Paid',
             payment_method: payment_method || 'Cash',
-            notes: notes || '',
+            notes: notes ? String(notes).slice(0, 500) : '',
             status: 'Waiting'
         });
 
@@ -60,16 +68,20 @@ const createVisit = async (req, res) => {
 
     } catch (error) {
         console.error('Error creating visit:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error creating visit' });
     }
 };
 
 // @desc    Add or Update Vitals for a Visit
 // @route   POST /api/visits/:id/vitals
-// @access  Private (Reception, Doctor)
+// @access  Private (Reception, Doctor, Admin)
 const addVitals = async (req, res) => {
     try {
         const visit_id = req.params.id;
+        if (!mongoose.Types.ObjectId.isValid(visit_id)) {
+            return res.status(400).json({ message: 'Invalid visit ID' });
+        }
+
         let { heart_rate, blood_pressure, temperature, height, weight, spo2, respiratory_rate } = req.body;
 
         const numHeight = height !== '' && height !== null && height !== undefined ? Number(height) : null;
@@ -77,7 +89,7 @@ const addVitals = async (req, res) => {
 
         // Calculate BMI
         let bmi = null;
-        if (numHeight && numWeight) {
+        if (numHeight && numWeight && numHeight > 0) {
             const heightInMeters = numHeight / 100;
             bmi = Number((numWeight / (heightInMeters * heightInMeters)).toFixed(2));
         }
@@ -86,14 +98,14 @@ const addVitals = async (req, res) => {
             { visit_id },
             {
                 visit_id,
-                heart_rate: heart_rate || null,
-                blood_pressure: blood_pressure || null,
-                temperature: temperature || null,
+                heart_rate: heart_rate ? String(heart_rate).slice(0, 20) : null,
+                blood_pressure: blood_pressure ? String(blood_pressure).slice(0, 20) : null,
+                temperature: temperature ? String(temperature).slice(0, 20) : null,
                 height: numHeight,
                 weight: numWeight,
                 bmi,
-                spo2: spo2 || null,
-                respiratory_rate: respiratory_rate || null
+                spo2: spo2 ? String(spo2).slice(0, 20) : null,
+                respiratory_rate: respiratory_rate ? String(respiratory_rate).slice(0, 20) : null
             },
             { upsert: true, new: true }
         );
@@ -102,7 +114,7 @@ const addVitals = async (req, res) => {
 
     } catch (error) {
         console.error('Error saving vitals:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error saving vitals' });
     }
 };
 
@@ -149,8 +161,10 @@ const getTodayVisits = async (req, res) => {
         res.json(formatted);
     } catch (error) {
         console.error('Error fetching today visits:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error retrieving today visits' });
     }
 };
+
+module.exports = { createVisit, addVitals, getTodayVisits };
 
 module.exports = { createVisit, addVitals, getTodayVisits };

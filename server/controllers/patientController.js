@@ -1,4 +1,5 @@
 const { Patient, Visit, Doctor, Department, Vitals, Prescription, PrescriptionMedicine, LabReport, LabTest, PharmacyBill } = require('../models');
+const { escapeRegex } = require('../middleware/validateMiddleware');
 
 // @desc    Register a new patient
 // @route   POST /api/patients
@@ -9,6 +10,15 @@ const registerPatient = async (req, res) => {
             name, age, gender, dob, blood_group, mobile_number, alternative_mobile,
             address, village, city, district, state, occupation, emergency_contact
         } = req.body;
+
+        if (!name || !mobile_number) {
+            return res.status(400).json({ message: 'Patient name and mobile number are required' });
+        }
+
+        const cleanMobile = String(mobile_number).trim();
+        if (cleanMobile.length < 5 || cleanMobile.length > 15) {
+            return res.status(400).json({ message: 'Invalid mobile number' });
+        }
 
         // Generate Patient ID (e.g., SKH000001)
         const lastPatient = await Patient.findOne().sort({ created_at: -1, _id: -1 });
@@ -23,20 +33,20 @@ const registerPatient = async (req, res) => {
 
         const patient = await Patient.create({
             patient_id,
-            name,
+            name: String(name).trim().slice(0, 100),
             age: age !== '' && age !== undefined ? Number(age) : null,
             gender: gender || null,
             dob: dob || null,
             blood_group: blood_group || null,
-            mobile_number,
-            alternative_mobile: alternative_mobile || null,
-            address: address || null,
-            village: village || null,
-            city: city || null,
-            district: district || null,
-            state: state || null,
-            occupation: occupation || null,
-            emergency_contact: emergency_contact || null
+            mobile_number: cleanMobile,
+            alternative_mobile: alternative_mobile ? String(alternative_mobile).trim().slice(0, 15) : null,
+            address: address ? String(address).trim().slice(0, 255) : null,
+            village: village ? String(village).trim().slice(0, 100) : null,
+            city: city ? String(city).trim().slice(0, 100) : null,
+            district: district ? String(district).trim().slice(0, 100) : null,
+            state: state ? String(state).trim().slice(0, 100) : null,
+            occupation: occupation ? String(occupation).trim().slice(0, 100) : null,
+            emergency_contact: emergency_contact ? String(emergency_contact).trim().slice(0, 100) : null
         });
 
         res.status(201).json({
@@ -46,7 +56,7 @@ const registerPatient = async (req, res) => {
         });
     } catch (error) {
         console.error('Error registering patient:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error registering patient' });
     }
 };
 
@@ -56,9 +66,12 @@ const registerPatient = async (req, res) => {
 const searchPatient = async (req, res) => {
     try {
         const { q } = req.query;
-        if (!q) return res.status(400).json({ message: 'Search query required' });
+        if (!q || typeof q !== 'string' || q.trim() === '') {
+            return res.status(400).json({ message: 'Search query required' });
+        }
 
-        const regex = new RegExp(q, 'i');
+        const safeQuery = escapeRegex(q.trim().slice(0, 100));
+        const regex = new RegExp(safeQuery, 'i');
         const patients = await Patient.find({
             $or: [
                 { mobile_number: regex },
@@ -70,7 +83,7 @@ const searchPatient = async (req, res) => {
         res.json(patients);
     } catch (error) {
         console.error('Error searching patient:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error searching patient' });
     }
 };
 
@@ -144,8 +157,10 @@ const getPatientHistory = async (req, res) => {
 
     } catch (error) {
         console.error('Error fetching patient history:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ message: 'Server error retrieving patient history' });
     }
 };
+
+module.exports = { registerPatient, searchPatient, getPatientHistory };
 
 module.exports = { registerPatient, searchPatient, getPatientHistory };

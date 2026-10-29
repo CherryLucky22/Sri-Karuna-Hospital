@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const { LabTest, LabReport, Patient, Visit, Doctor, User, Department } = require('../models');
 
 const getISTDate = () => {
@@ -12,7 +13,7 @@ exports.getAllLabTests = async (req, res) => {
         res.json(tests);
     } catch (error) {
         console.error('Error fetching lab tests:', error);
-        res.status(500).json({ message: 'Error fetching lab tests', error: error.message });
+        res.status(500).json({ message: 'Error fetching lab tests' });
     }
 };
 
@@ -20,15 +21,22 @@ exports.getAllLabTests = async (req, res) => {
 exports.prescribeLabTest = async (req, res) => {
     const { visitId, testId, remarks } = req.body;
     try {
+        if (!visitId || !mongoose.Types.ObjectId.isValid(visitId)) {
+            return res.status(400).json({ message: 'Valid visit ID required' });
+        }
+        if (!testId || !mongoose.Types.ObjectId.isValid(testId)) {
+            return res.status(400).json({ message: 'Valid lab test ID required' });
+        }
+
         await LabReport.create({
             visit_id: visitId,
             test_id: testId,
-            remarks: remarks || ''
+            remarks: remarks ? String(remarks).slice(0, 500) : ''
         });
         res.status(201).json({ message: 'Lab test prescribed successfully' });
     } catch (error) {
         console.error('Error prescribing lab test:', error);
-        res.status(500).json({ message: 'Error prescribing lab test', error: error.message });
+        res.status(500).json({ message: 'Error prescribing lab test' });
     }
 };
 
@@ -78,7 +86,7 @@ exports.getLabReports = async (req, res) => {
         res.json(formatted);
     } catch (error) {
         console.error('Error fetching lab reports:', error);
-        res.status(500).json({ message: 'Error fetching lab reports', error: error.message });
+        res.status(500).json({ message: 'Error fetching lab reports' });
     }
 };
 
@@ -88,11 +96,15 @@ exports.updateLabReport = async (req, res) => {
     const { result_value, labRemarks, status } = req.body;
 
     try {
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ message: 'Invalid report ID' });
+        }
+
         const report = await LabReport.findByIdAndUpdate(
             id,
             {
-                result_value,
-                lab_remarks: labRemarks,
+                result_value: result_value !== undefined ? String(result_value).slice(0, 500) : undefined,
+                lab_remarks: labRemarks !== undefined ? String(labRemarks).slice(0, 500) : undefined,
                 status: status || 'Completed'
             },
             { new: true }
@@ -105,7 +117,7 @@ exports.updateLabReport = async (req, res) => {
         res.json({ message: 'Lab report updated successfully' });
     } catch (error) {
         console.error('Error updating lab report:', error);
-        res.status(500).json({ message: 'Error updating lab report', error: error.message });
+        res.status(500).json({ message: 'Error updating lab report' });
     }
 };
 
@@ -114,21 +126,23 @@ exports.addWalkInTest = async (req, res) => {
     const { name, mobile_number, age, gender, tests, payment_method } = req.body;
 
     try {
-        if (!name || !mobile_number || !tests || tests.length === 0) {
-            return res.status(400).json({ message: 'Missing required fields or tests' });
+        if (!name || !mobile_number || !tests || !Array.isArray(tests) || tests.length === 0) {
+            return res.status(400).json({ message: 'Missing required fields or tests list' });
         }
 
+        const cleanMobile = String(mobile_number).trim();
+
         // 1. Check if patient exists
-        let patient = await Patient.findOne({ mobile_number });
+        let patient = await Patient.findOne({ mobile_number: cleanMobile });
         if (!patient) {
             const count = await Patient.countDocuments();
             const newPatientIdStr = `SKH${String(count + 1).padStart(6, '0')}`;
             patient = await Patient.create({
                 patient_id: newPatientIdStr,
-                name,
-                age: age || null,
+                name: String(name).trim().slice(0, 100),
+                age: age ? Number(age) : null,
                 gender: gender || null,
-                mobile_number
+                mobile_number: cleanMobile
             });
         }
 
@@ -172,15 +186,17 @@ exports.addWalkInTest = async (req, res) => {
 
         // 4. Create lab reports
         for (const testId of tests) {
-            await LabReport.create({
-                visit_id: visit._id,
-                test_id: testId
-            });
+            if (mongoose.Types.ObjectId.isValid(testId)) {
+                await LabReport.create({
+                    visit_id: visit._id,
+                    test_id: testId
+                });
+            }
         }
 
         res.status(201).json({ message: 'Walk-in test created successfully', visitId: visit._id.toString() });
     } catch (error) {
         console.error('Error creating walk-in test:', error);
-        res.status(500).json({ message: 'Error creating walk-in test', error: error.message });
+        res.status(500).json({ message: 'Error creating walk-in test' });
     }
 };
